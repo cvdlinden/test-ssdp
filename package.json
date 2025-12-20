@@ -1,5 +1,5 @@
 {
-  "name": "testssdp",
+  "name": "test-ssdp",
   "version": "1.0.0",
   "description": "Testing Node with SSDP",
   "main": "app.js",
