@@ -30,7 +30,7 @@ var upnpClient = undefined;
 // ==================== pulling upnp devices ====================
 (async () => {
   try {
-    const mod = await import('./ssdp-discovery.mjs');
+    const mod = await import('./modules/ssdp-discovery.mjs');
     const startDiscovery = mod.startDiscovery || mod.default;
     const discovery = startDiscovery();
 
