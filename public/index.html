@@ -1,18 +1,61 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" href="/favicon.ico" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>WiiM Mini Web UI</title>
-  <script type="module" crossorigin src="/assets/index.49266629.js"></script>
-  <link rel="stylesheet" href="/assets/index.f69a2ed8.css">
+  <meta charset="UTF-8" />
+  <title>UPnP / SSDP Explorer – UI Mockup</title>
+  <link rel="stylesheet" href="styles.css" />
 </head>
-
 <body>
-    <div id="app"></div>
-    
-</body>
+  <div class="app">
+    <!-- Panel 1: Servers -->
+    <section class="panel active" data-panel="1">
+      <header class="panel-header">
+        <span class="panel-title">Servers (SSDP)</span>
+        <div class="toolbar">
+          <button>Refresh</button>
+          <button>Filter</button>
+        </div>
+      </header>
+      <div class="panel-content">
+        <div class="list-item" data-server="MediaServer-01">
+          MediaServer-01
+          <small>192.168.1.10 • UPnP AV</small>
+        </div>
+        <div class="list-item" data-server="Router-IGD">
+          Router-IGD
+          <small>192.168.1.1 • InternetGatewayDevice</small>
+        </div>
+      </div>
+    </section>
 
+    <!-- Panel 2: Endpoints -->
+    <section class="panel inactive" data-panel="2">
+      <header class="panel-header">
+        <span class="panel-title">Endpoints</span>
+        <div class="toolbar">
+          <button>Refresh</button>
+          <button>Info</button>
+        </div>
+      </header>
+      <div class="panel-content" id="endpoints">
+        <em>Select a server first</em>
+      </div>
+    </section>
+
+    <!-- Panel 3: Actions -->
+    <section class="panel inactive" data-panel="3">
+      <header class="panel-header">
+        <span class="panel-title">Actions / XML</span>
+        <div class="toolbar">
+          <button>Toggle View</button>
+        </div>
+      </header>
+      <div class="panel-content" id="actions">
+        <em>Select an endpoint first</em>
+      </div>
+    </section>
+  </div>
+
+  <script src="app.js"></script>
+</body>
 </html>

@@ -262,8 +262,7 @@ io.on("connection", (socket) => {
 
 webServer.listen(8080, () => {
   console.log(
-    "Web Server started at http://localhost:%s%s",
-    webServer.address().address,
+    "Web Server started at http://localhost:%s",
     webServer.address().port
   );
 });
