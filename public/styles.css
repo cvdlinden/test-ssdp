@@ -1,3 +1,32 @@
+/*
+  public/styles.css
+
+  Purpose
+  - Global stylesheet for the test-ssdp UI served from `/public`.
+
+  Structure and conventions
+  - CSS variables are defined on `:root` for easy theming and reuse.
+  - Layout uses modern Flexbox and avoids framework dependencies.
+  - Class naming is intentionally compact (`.app`, `.panel`, `.toolbar`)
+    to keep the stylesheet small and readable for this demo project.
+
+  Events & Interaction
+  - Panels toggle via `.active` / `.inactive` classes applied by the
+    client-side script in `public/app.js`.
+  - Buttons use `:hover` to indicate interactive state; focus styles
+    are intentionally simple but can be extended for accessibility.
+
+  Extending the stylesheet
+  - To change theme colors, override the `--*` variables in a higher
+    specificty selector or a separate theme file.
+  - Add component-specific rules near the top or in separate files
+    under `public/` and import/concatenate during a build step.
+
+  License & Attribution
+  - This file is part of the `test-ssdp` project. Keep styling small and
+    focused for local testing and demos.
+*/
+
 :root {
   --bg: #0f172a;
   --panel-bg: #111827;

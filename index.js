@@ -1,3 +1,32 @@
+/**
+ * index.js
+ *
+ * Entry point for the test-ssdp demo web server.
+ *
+ * Responsibilities:
+ * - Start an Express HTTP server serving the UI from `/public`.
+ * - Start SSDP device discovery via a separate ESM module
+ *   (`./modules/ssdp-discovery.mjs`) which emits `device` events.
+ * - Expose a small Socket.IO interface used by the UI to request
+ *   discovered devices, services and control actions.
+ *
+ * Run:
+ *   node index.js
+ *
+ * Notes:
+ * - The project mixes CommonJS (this file) and a small ESM discovery
+ *   module. Discovery is imported dynamically to avoid converting the
+ *   whole app to ESM.
+ * - The server listens on port 8080 by default; change `webServer.listen`
+ *   call below to use a different port.
+ * - Dependencies: express, socket.io, node-ssdp, xml2js, upnp-device-client
+ *
+ * Events / public API (Socket.IO):
+ * - `devices` -> emits array of discovered devices
+ * - `services` -> emits list of services for the selected device
+ * - `actions`  -> send control actions (Play/Pause/etc.)
+ */
+
 const express = require("express");
 const app = express();
 const http = require("http");

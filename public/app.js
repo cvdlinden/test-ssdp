@@ -1,3 +1,29 @@
+/**
+ * public/app.js
+ *
+ * Client-side UI glue for the `test-ssdp` demo application.
+ *
+ * Responsibilities:
+ * - Connect to the server via `socket.io` and request discovered devices.
+ * - Render devices, services and actions into the simple three-panel UI.
+ * - Manage shallow navigation state with the History API so panels may
+ *   be activated via clicks or browser back/forward.
+ *
+ * Key DOM hooks:
+ * - Devices panel: `[data-panel="0"] .panel-content`
+ * - Services panel: `#services`
+ * - Actions panel: `#actions`
+ * - Discover button: `[data-panel="0"] .toolbar button`
+ *
+ * Socket API used:
+ * - Emit `devices` to request the current discovered devices.
+ * - Emit `services` with a device UDN to request service list.
+ * - Listen for `devices` (array) and render results.
+ *
+ * Initialization:
+ * - Call `UPnPExplorer.init()` after DOMContentLoaded (happens below).
+ */
+
 const UPnPExplorer = (() => {
     'use strict';
 
