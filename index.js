@@ -92,37 +92,35 @@ app.use((req, res, next) => {
   next();
 });
 
-const trackSource = (spotify, trackSource) => {
-  // Spotify specific signature
-  if (spotify === "1") {
-    return "spotify";
-  }
-
-  // BubbleUPnP clients
-  if (selectedDevice.manufacturer.indexOf("Bubblesoft") >= 0) {
-    return "upnpserver";
-  }
-
-  // Other track source based on WiiM Mini Specific properties
-  if (trackSource) {
-    return trackSource.toLowerCase();
-  }
-
-  return "upnpserver";
-};
-
 // ==================== upnpClient ====================
 io.on("connection", (socket) => {
 
+  // On discover request, trigger SSDP search
+  // Then after a delay, emit the current list of devices
+  socket.on("discover", () => {
+    ssdpClient.search("ssdp:all");
+    console.log("socket:discover: SSDP search triggered");
+    setTimeout(() => {
+      let result = [];
+      for (const key in devices) {
+        result.push(devices[key]);
+      }
+      console.log("socket:discover: emitting devices", result);
+      socket.emit("devices", result);
+    }, 3000); // 3s delay for responses
+  });
+
+  // On devices request, emit the current list of discovered devices
   socket.on("devices", () => {
     let result = [];
     for (const key in devices) {
       result.push(devices[key]);
     }
-    console.log("socket:devices:", result);
+    // console.log("socket:devices:", result);
     socket.emit("devices", result);
   });
 
+  // On services request, emit the services for the selected device
   socket.on("services", (deviceUdn) => {
     if (selectedDevice) {
       upnpClient = new UPNP(selectedDevice.location);
@@ -143,6 +141,7 @@ io.on("connection", (socket) => {
     }
   });
 
+  // On actions request, emit the list of actions for the selected service
   socket.on("actions", (actions) => {
     if (upnpClient) {
       if (actions === "status") {
