@@ -1,61 +1,68 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
-  <title>UPnP / SSDP Explorer – UI Mockup</title>
+  <title>UPnP Explorer - UI Mockup</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
+
 <body>
   <div class="app">
-    <!-- Panel 1: Servers -->
-    <section class="panel active" data-panel="1">
+
+    <!-- Panel 1: Devices -->
+    <section class="panel active" data-panel="0">
       <header class="panel-header">
-        <span class="panel-title">Servers (SSDP)</span>
+        <span class="panel-title">Devices (SSDP)</span>
         <div class="toolbar">
-          <button>Refresh</button>
+          <button>Discover</button>
           <button>Filter</button>
         </div>
       </header>
       <div class="panel-content">
-        <div class="list-item" data-server="MediaServer-01">
-          MediaServer-01
-          <small>192.168.1.10 • UPnP AV</small>
+        <div class="list-item" data-device-id="uuid:media-server-1">
+          MediaServer
+          <small>192.168.1.10 • urn:schemas-upnp-org:device:MediaServer:1</small>
         </div>
-        <div class="list-item" data-server="Router-IGD">
-          Router-IGD
-          <small>192.168.1.1 • InternetGatewayDevice</small>
+
+        <div class="list-item" data-device-id="uuid:igd-1">
+          Internet Gateway Device
+          <small>192.168.1.1 • urn:schemas-upnp-org:device:InternetGatewayDevice:1</small>
         </div>
       </div>
     </section>
 
-    <!-- Panel 2: Endpoints -->
-    <section class="panel inactive" data-panel="2">
+    <!-- Panel 2: Services -->
+    <section class="panel inactive" data-panel="1">
       <header class="panel-header">
-        <span class="panel-title">Endpoints</span>
+        <span class="panel-title">Services</span>
         <div class="toolbar">
           <button>Refresh</button>
-          <button>Info</button>
+          <button>Metadata</button>
         </div>
       </header>
-      <div class="panel-content" id="endpoints">
-        <em>Select a server first</em>
+      <div class="panel-content" id="services">
+        <em>Select a device first</em>
       </div>
     </section>
 
     <!-- Panel 3: Actions -->
-    <section class="panel inactive" data-panel="3">
+    <section class="panel inactive" data-panel="2">
       <header class="panel-header">
-        <span class="panel-title">Actions / XML</span>
+        <span class="panel-title">Actions / SCPD</span>
         <div class="toolbar">
-          <button>Toggle View</button>
+          <button>Toggle XML</button>
         </div>
       </header>
       <div class="panel-content" id="actions">
-        <em>Select an endpoint first</em>
+        <em>Select a service first</em>
       </div>
     </section>
+
   </div>
 
+  <script src="/socket.io/socket.io.js"></script>
   <script src="app.js"></script>
 </body>
+
 </html>

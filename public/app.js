@@ -1,99 +1,192 @@
-const UPNPExplorer = (() => {
-  'use strict';
+const UPnPExplorer = (() => {
+    'use strict';
 
-  // --- Private state ---
-  const panels = document.querySelectorAll('.panel');
-  const endpointsContainer = document.getElementById('endpoints');
-  const actionsContainer = document.getElementById('actions');
+    // =========================
+    // Socket
+    // =========================
+    const socket = io();
 
-  // --- Private methods ---
+    // =========================
+    // State
+    // =========================
+    const state = {
+        devices: [],
+        selectedDevice: null,
+        selectedService: null
+    };
 
-  /**
-   * Activates one panel and pushes the others to the background
-   */
-  function activatePanel(index) {
-    panels.forEach((panel, i) => {
-      panel.classList.toggle('active', i === index);
-      panel.classList.toggle('inactive', i !== index);
-    });
-  }
+    // =========================
+    // DOM
+    // =========================
+    const panels = document.querySelectorAll('.panel');
 
-  /**
-   * Binds click handlers to the panels themselves
-   */
-  function bindPanelNavigation() {
-    panels.forEach((panel, index) => {
-      panel.addEventListener('click', () => {
-        if (!panel.classList.contains('active')) {
-          activatePanel(index);
+    const devicesContainer = document.querySelector(
+        '[data-panel="0"] .panel-content'
+    );
+    const servicesContainer = document.getElementById('services');
+    const actionsContainer = document.getElementById('actions');
+
+    const discoverButton = document.querySelector(
+        '[data-panel="0"] .toolbar button'
+    );
+
+    // =========================
+    // Panel Management
+    // =========================
+    function activatePanel(index) {
+        panels.forEach((panel, i) => {
+            panel.classList.toggle('active', i === index);
+            panel.classList.toggle('inactive', i !== index);
+        });
+    }
+
+    function bindPanelNavigation() {
+        panels.forEach((panel, index) => {
+            panel.addEventListener('click', () => {
+                if (!panel.classList.contains('active')) {
+                    pushNavigationState(index, state.selectedDevice, state.selectedService);
+                }
+            });
+        });
+    }
+
+    // =========================
+    // History Navigation
+    // =========================
+    function pushNavigationState(level, deviceUdn = null, serviceId = null) {
+        const navState = { level, deviceUdn, serviceId };
+        history.pushState(navState, '', '');
+        applyNavigationState(navState);
+    }
+
+    function applyNavigationState(navState) {
+        if (!navState) return;
+
+        state.selectedDevice = navState.deviceUdn;
+        state.selectedService = navState.serviceId;
+
+        switch (navState.level) {
+            case 0:
+                activatePanel(0);
+                break;
+
+            case 1:
+                activatePanel(1);
+                servicesContainer.innerHTML ||= `<em>Select a device</em>`;
+                break;
+
+            case 2:
+                activatePanel(2);
+                actionsContainer.innerHTML ||= `<em>Select a service</em>`;
+                break;
         }
-      });
-    });
-  }
+    }
 
-  /**
-   * Binds server selection handlers
-   */
-  function bindServerSelection() {
-    document.querySelectorAll('[data-server]').forEach(item => {
-      item.addEventListener('click', (e) => {
-        e.stopPropagation();
-        activatePanel(1);
+    function bindHistoryEvents() {
+        window.addEventListener('popstate', (event) => {
+            applyNavigationState(event.state);
+        });
+    }
 
-        endpointsContainer.innerHTML = `
-          <div class="list-item" data-endpoint="ContentDirectory">
-            ContentDirectory
-            <small>urn:schemas-upnp-org:service:ContentDirectory:1</small>
-          </div>
-          <div class="list-item" data-endpoint="ConnectionManager">
-            ConnectionManager
-            <small>urn:schemas-upnp-org:service:ConnectionManager:1</small>
-          </div>
-        `;
+    // =========================
+    // Devices
+    // =========================
+    function requestDevices() {
+        devicesContainer.innerHTML = `<em>Discovering devices…</em>`;
+        socket.emit('devices');
+    }
 
-        bindEndpointSelection();
-      });
-    });
-  }
+    function renderDevices(devices) {
+        if (!Array.isArray(devices) || devices.length === 0) {
+            devicesContainer.innerHTML = `<em>No devices discovered</em>`;
+            return;
+        }
 
-  /**
-   * Binds endpoint selection handlers
-   */
-  function bindEndpointSelection() {
-    document.querySelectorAll('[data-endpoint]').forEach(item => {
-      item.addEventListener('click', (e) => {
-        e.stopPropagation();
-        activatePanel(2);
+        devicesContainer.innerHTML = devices
+            .map(device => `
+        <div class="list-item" data-device-id="${device.udn}">
+          ${device.friendlyName || 'Unknown Device'}
+          <small>
+            ${device.address || 'unknown'} • ${device.deviceType}
+          </small>
+        </div>
+      `)
+            .join('');
 
-        actionsContainer.innerHTML = `
-          <pre>
-&lt;actionList&gt;
-  &lt;action&gt;
-    &lt;name&gt;Browse&lt;/name&gt;
-  &lt;/action&gt;
-  &lt;action&gt;
-    &lt;name&gt;GetProtocolInfo&lt;/name&gt;
-  &lt;/action&gt;
-&lt;/actionList&gt;
-        </pre>
-        `;
-      });
-    });
-  }
+        bindDeviceSelection();
+    }
 
-  // --- Public API ---
+    function bindDeviceSelection() {
+        document.querySelectorAll('[data-device-id]').forEach(item => {
+            item.addEventListener('click', (e) => {
+                e.stopPropagation();
 
-  function init() {
-    bindPanelNavigation();
-    bindServerSelection();
-  }
+                const deviceUdn = item.dataset.deviceId;
 
-  return {
-    init
-  };
+                state.selectedDevice = deviceUdn;
+                state.selectedService = null;
+
+                servicesContainer.innerHTML = `<em>Loading services…</em>`;
+
+                pushNavigationState(1, deviceUdn);
+                socket.emit('services', deviceUdn);
+            });
+        });
+    }
+
+    // =========================
+    // Socket Events
+    // =========================
+    function bindSocketEvents() {
+        socket.on('connect', () => {
+            requestDevices();
+        });
+
+        socket.on('devices', (devices) => {
+            state.devices = devices;
+            renderDevices(devices);
+        });
+
+        // Placeholder for next step
+        // socket.on('services', renderServices);
+    }
+
+    // =========================
+    // UI Actions
+    // =========================
+    function bindUIActions() {
+        if (discoverButton) {
+            discoverButton.addEventListener('click', (e) => {
+                e.stopPropagation();
+                requestDevices();
+            });
+        }
+    }
+
+    // =========================
+    // Init
+    // =========================
+    function init() {
+        bindPanelNavigation();
+        bindSocketEvents();
+        bindUIActions();
+        bindHistoryEvents();
+
+        history.replaceState(
+            { level: 0, deviceUdn: null, serviceId: null },
+            '',
+            ''
+        );
+
+        devicesContainer.innerHTML = `<em>Waiting for connection…</em>`;
+    }
+
+    return {
+        init
+    };
 })();
 
-// Bootstrap when DOM is ready
+// Bootstrap
 document.addEventListener('DOMContentLoaded', () => {
-  UPNPExplorer.init();
+    UPnPExplorer.init();
 });
