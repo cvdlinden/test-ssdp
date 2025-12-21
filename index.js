@@ -35,7 +35,7 @@ const SSDP = require("node-ssdp").Client;
 const UPNP = require("upnp-device-client");
 
 // const path = require("path");
-// const xml2js = require("xml2js");
+const xml2js = require("xml2js");
 // const cheerio = require("cheerio");
 const bodyParser = require("body-parser");
 
@@ -127,14 +127,14 @@ io.on("connection", (socket) => {
   });
 
   // On services request, emit the services for the selected device
-  socket.on("services", (deviceUdn) => {
-    console.log("socket:services: requested for deviceUdn", deviceUdn);
+  socket.on("services", (msg) => {
+    console.log("socket:services: requested for deviceUdn", msg);
     // Grab from the devices list with matching UDN
     selectedDevice = null;
     for (const key in devices) {
       const d = devices[key];
       const udn = d.device && d.device.UDN ? d.device.UDN[0] : null;
-      if (udn === deviceUdn) {
+      if (udn === msg) {
         selectedDevice = d;
         break;
       }
@@ -161,32 +161,66 @@ io.on("connection", (socket) => {
   });
 
   // On actions request, emit the list of actions for the selected service
-  socket.on("actions", (actions) => {
-    if (upnpClient) {
-      if (actions === "status") {
-        upnpClient.callAction(
-          "AVTransport",
-          "GetTransportInfo",
-          { InstanceID: 0 },
-          (err, result) => {
-            if (err) throw err;
-            console.log("socket:actions: status -", result.CurrentTransportState);
-            socket.emit("actions", result.CurrentTransportState);
-          }
-        );
+  socket.on("actions", (msg) => {
+    console.log("socket:actions: requested action", msg);
+    // Grab the device based on the msg.deviceUdn
+    selectedDevice = null;
+    for (const key in devices) {
+      const d = devices[key];
+      const udn = d.device && d.device.UDN ? d.device.UDN[0] : null;
+      if (udn === msg.deviceUdn) {
+        selectedDevice = d;
+        break;
       }
     }
-    if (["Play", "Next", "Prev", "Pause"].includes(actions)) {
-      let options = { InstanceID: 0 };
-
-      if (actions === "Play") options.Speed = 1;
-
-      console.log("socket:actions", actions);
-      upnpClient.callAction("AVTransport", actions, options, (err, result) => {
-        if (err) throw err;
-      });
+    // console.log("socket:actions: selectedDevice", selectedDevice);
+    // Grab the SCPD URL from the selected service
+    let scpdUrl = null;
+    if (selectedDevice) {
+      const services = selectedDevice.device.serviceList[0].service || [];
+      for (let i = 0; i < services.length; i++) {
+        const service = services[i];
+        const serviceId = service.serviceId ? service.serviceId[0] : null;
+        if (serviceId === msg.serviceId) {
+          scpdUrl = service.SCPDURL ? service.SCPDURL[0] : null;
+          break;
+        }
+      }
     }
-    socket.emit('actions', "ACTIONS");
+    console.log("socket:actions: SCPD URL", scpdUrl);
+
+    // Construct the ip and SCPD URL for upnp-device-client
+    if (selectedDevice && scpdUrl) {
+      const locationUrl = new URL(selectedDevice.ssdp.LOCATION);
+      const baseUrl = locationUrl.origin;
+      const fullScpdUrl = new URL(scpdUrl, baseUrl).href;
+      console.log("socket:actions: full SCPD URL", fullScpdUrl);
+      http
+        .get(fullScpdUrl, (response) => {
+          let completeResponse = '';
+          response.on('data', (chunk) => {
+            completeResponse += chunk;
+          });
+          response.on('end', () => {
+            // Parse the SCPD XML to extract actions
+            // xml2js.parseString(completeResponse, (err, parsed) => {
+            //   if (err) {
+            //     console.error('Failed to parse SCPD XML:', err);
+            //     socket.emit("actions", { error: 'Failed to parse SCPD XML' });
+            //     return;
+            //   }
+            //   const actionList = parsed.scpd.actionList[0].action || [];
+            //   let actions = actionList.map(a => a.name[0]);
+            console.log("socket:actions: available actions", completeResponse);
+            socket.emit("actions", completeResponse);
+            // });
+          });
+        })
+        .on('error', (e) => {
+          console.error('Failed to fetch SCPD URL:', e);
+          socket.emit("actions", { error: 'Failed to fetch SCPD URL' });
+        });
+    }
   });
 
   // socket.on("disconnect", () => {
