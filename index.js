@@ -30,13 +30,13 @@
 const express = require("express");
 const app = express();
 const http = require("http");
-const https = require("https");
+// const https = require("https");
 const SSDP = require("node-ssdp").Client;
 const UPNP = require("upnp-device-client");
 
-const path = require("path");
-const xml2js = require("xml2js");
-const cheerio = require("cheerio");
+// const path = require("path");
+// const xml2js = require("xml2js");
+// const cheerio = require("cheerio");
 const bodyParser = require("body-parser");
 
 const webServer = http.createServer(app);
@@ -52,7 +52,7 @@ app.use(bodyParser.json());
 
 let xml = "";
 let devices = {};
-let devicesByLocation = [];
+// let devicesByLocation = [];
 let selectedDevice = undefined;
 var upnpClient = undefined;
 
@@ -64,12 +64,16 @@ var upnpClient = undefined;
     const discovery = startDiscovery();
 
     discovery.on('device', (d) => {
-      const key = d.friendlyName || (d.extendedInfo && d.extendedInfo.friendlyName) || '';
+      // console.log('Discovered device:', d);
+      // devices.push(d);
+      const key = d.ssdp.LOCATION
+      // const key = d.friendlyName || (d.extendedInfo && d.extendedInfo.friendlyName) || '';
       devices[key] = {
-        ...(d.extendedInfo || {}),
-        ...(d.deviceInfo || {}),
+        ...d,
+        //   ...(d.extendedInfo || {}),
+        //   ...(d.deviceInfo || {}),
       };
-      devicesByLocation.push(d.deviceInfo || {});
+      // devicesByLocation.push(d.deviceInfo || {});
     });
 
     discovery.on('error', (err) => {
@@ -105,9 +109,10 @@ io.on("connection", (socket) => {
       for (const key in devices) {
         result.push(devices[key]);
       }
-      console.log("socket:discover: emitting devices", result);
+      sortDevices(result);
+      // console.log("socket:discover: emitting devices", result);
       socket.emit("devices", result);
-    }, 3000); // 3s delay for responses
+    }, 5000); // 5s delay for responses
   });
 
   // On devices request, emit the current list of discovered devices
@@ -116,6 +121,7 @@ io.on("connection", (socket) => {
     for (const key in devices) {
       result.push(devices[key]);
     }
+    sortDevices(result);
     // console.log("socket:devices:", result);
     socket.emit("devices", result);
   });
@@ -182,3 +188,15 @@ webServer.listen(8080, () => {
     webServer.address().port
   );
 });
+
+// Sort devices by friendly name
+function sortDevices(result) {
+  result.sort((a, b) => {
+    const nameA = (a.device && a.device.friendlyName) ? a.device.friendlyName[0].toUpperCase() : '';
+    const nameB = (b.device && b.device.friendlyName) ? b.device.friendlyName[0].toUpperCase() : '';
+    if (nameA < nameB) return -1;
+    if (nameA > nameB) return 1;
+    return 0;
+  });
+}
+

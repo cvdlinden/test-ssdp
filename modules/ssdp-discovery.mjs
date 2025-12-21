@@ -37,59 +37,69 @@ const { Client: SSDP } = pkg;
  * @returns {import('events').EventEmitter}
  */
 export function startDiscovery() {
-  const emitter = new EventEmitter();
+    const emitter = new EventEmitter();
 
-  // Create the SSDP client and immediately kick off a search.
-  const ssdpClient = new SSDP({ explicitSocketBind: true });
-  ssdpClient.search('ssdp:all');
+    // Create the SSDP client and immediately kick off a search.
+    const ssdpClient = new SSDP({ explicitSocketBind: true });
+    ssdpClient.search('ssdp:all');
 
-  // On each SSDP response, fetch the device description XML, parse it
-  // and emit a normalized `device` object. Any errors are re-emitted to
-  // the host via the `error` event.
-  ssdpClient.on('response', (resp) => {
-    http
-      .get(resp.LOCATION, (response) => {
-        let completeResponse = '';
-        response.on('data', (chunk) => {
-          completeResponse += chunk;
-        });
-        response.on('end', () => {
-          xml2js.parseString(completeResponse, (err, parsed) => {
-            if (err) {
-              emitter.emit('error', err);
-              return;
-            }
-            try {
-              const temp = parsed.root.device[0];
-              const deviceInfo = {
-                location: resp.LOCATION,
-                manufacturer: temp.manufacturer ? temp.manufacturer[0] : '',
-              };
-              const extendedInfo = {
-                deviceType: temp.deviceType ? temp.deviceType[0] : '',
-                friendlyName: temp.friendlyName ? temp.friendlyName[0] : '',
-                ssidName: temp.ssidName ? temp.ssidName[0] : '',
-                uuid: temp.uuid ? temp.uuid[0] : '',
-              };
-              const friendlyName = extendedInfo.friendlyName || '';
+    // On each SSDP response, fetch the device description XML, parse it
+    // and emit a normalized `device` object. Any errors are re-emitted to
+    // the host via the `error` event.
+    ssdpClient.on('response', (resp, status, ip) => {
+        // console.log('SSDP response from:', resp, status, respIp);
+        http
+            .get(resp.LOCATION, (response) => {
+                let completeResponse = '';
+                response.on('data', (chunk) => {
+                    completeResponse += chunk;
+                });
+                response.on('end', () => {
+                    xml2js.parseString(completeResponse, (err, parsed) => {
+                        if (err) {
+                            emitter.emit('error', err);
+                            return;
+                        }
+                        try {
+                            // console.log('Parsed XML:', parsed.root.device[0]);
+                            // const temp = parsed.root.device[0];
+                            // const deviceInfo = {
+                            //     location: resp.LOCATION,
+                            //     manufacturer: temp.manufacturer ? temp.manufacturer[0] : '',
+                            //     modelName: temp.modelName ? temp.modelName[0] : '',
+                            //     modelNumber: temp.modelNumber ? temp.modelNumber[0] : '',
 
-              emitter.emit('device', {
-                friendlyName,
-                deviceInfo,
-                extendedInfo,
-              });
-            } catch (e) {
-              emitter.emit('error', e);
-            }
-          });
-        });
-      })
-      .on('error', (e) => {
-        emitter.emit('error', e);
-      });
-  });
+                            // };
+                            // const extendedInfo = {
+                            //     deviceType: temp.deviceType ? temp.deviceType[0] : '',
+                            //     friendlyName: temp.friendlyName ? temp.friendlyName[0] : '',
+                            //     ssidName: temp.ssidName ? temp.ssidName[0] : '',
+                            //     uuid: temp.uuid ? temp.uuid[0] : '',
+                            // };
+                            // const friendlyName = extendedInfo.friendlyName || '';
+                            // const address = respIp.address || '';
 
-  return emitter;
+                            emitter.emit('device', {
+                                // address,
+                                // friendlyName,
+                                // deviceInfo,
+                                // extendedInfo,
+                                ssdp: resp,
+                                ip: ip,
+                                device: parsed.root.device[0]
+                            });
+                        } catch (e) {
+                            emitter.emit('error', e);
+                        }
+                    });
+                });
+            })
+            .on('error', (e) => {
+                emitter.emit('error', e);
+            });
+    });
+
+    return emitter;
 }
 
 export default startDiscovery;
