@@ -128,23 +128,36 @@ io.on("connection", (socket) => {
 
   // On services request, emit the services for the selected device
   socket.on("services", (deviceUdn) => {
-    if (selectedDevice) {
-      upnpClient = new UPNP(selectedDevice.location);
-      upnpClient.getServices((err, services) => {
-        if (err) throw err;
-        let serviceList = [];
-        for (const serviceId in services) {
-          serviceList.push({
-            serviceId: serviceId,
-            serviceType: services[serviceId].serviceType,
-          });
-        }
-        console.log("socket:services:", serviceList);
-        socket.emit("services", serviceList);
-      });
-    } else {
-      console.log("socket:services: no device selected");
+    console.log("socket:services: requested for deviceUdn", deviceUdn);
+    // Grab from the devices list with matching UDN
+    selectedDevice = null;
+    for (const key in devices) {
+      const d = devices[key];
+      const udn = d.device && d.device.UDN ? d.device.UDN[0] : null;
+      if (udn === deviceUdn) {
+        selectedDevice = d;
+        break;
+      }
     }
+    // console.log("socket:services: selectedDevice", selectedDevice.device.serviceList[0]);
+    socket.emit("services", selectedDevice.device.serviceList[0]);
+    // if (selectedDevice) {
+    //   upnpClient = new UPNP(selectedDevice.ssdp.location);
+    //   upnpClient.getServices((err, services) => {
+    //     if (err) throw err;
+    //     let serviceList = [];
+    //     for (const serviceId in services) {
+    //       serviceList.push({
+    //         serviceId: serviceId,
+    //         serviceType: services[serviceId].serviceType,
+    //       });
+    //     }
+    //     console.log("socket:services:", serviceList);
+    //     socket.emit("services", serviceList);
+    //   });
+    // } else {
+    //   console.log("socket:services: no device selected");
+    // }
   });
 
   // On actions request, emit the list of actions for the selected service
