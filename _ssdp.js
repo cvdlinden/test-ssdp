@@ -1,12 +1,13 @@
 const SSDP = require('node-ssdp').Client
-    , ssdpClient = new SSDP({explicitSocketBind: true});
+    , ssdpClient = new SSDP({ explicitSocketBind: true });
 const http = require("http");
 const xml2js = require("xml2js");
 const UPNP = require("upnp-device-client");
 
 var upnpClient = undefined;
 
-ssdpClient.on("response", (resp, code, rinfo) => {
+// ssdpClient.on("response", (resp, code, rinfo) => {
+ssdpClient.on("response", (resp) => {
     // Is this a MediaRenderer?
     if (resp.ST.indexOf("urn:schemas-upnp-org:device:MediaRenderer") >= 0) {
         console.log("Renderer found at:", resp.LOCATION)
@@ -15,7 +16,8 @@ ssdpClient.on("response", (resp, code, rinfo) => {
         // console.log(JSON.stringify(rinfo, null, '  '));
 
         // Check the device properties
-        const deviceInfo = http
+        // const deviceInfo = http
+        http
             .get(resp.LOCATION, function (response) {
                 // console.log("Render info", response);
                 var responseCache = "";
@@ -23,7 +25,8 @@ ssdpClient.on("response", (resp, code, rinfo) => {
                     responseCache += chunk;
                 });
                 response.on("end", function () {
-                    const metaReq = xml2js.parseString(
+                    // const metaReq = xml2js.parseString(
+                    xml2js.parseString(
                         responseCache,
                         (err, result) => {
                             if (err) {

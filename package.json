@@ -4,18 +4,26 @@
   "description": "Testing Node with SSDP",
   "main": "index.js",
   "scripts": {
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
-  "author": "",
   "license": "ISC",
   "dependencies": {
     "cheerio": "^1.1.2",
     "express": "^4.22.1",
     "node-ssdp": "^4.0.1",
     "node-upnp-utils": "^1.0.3",
-    "socket.io": "^4.8.1",
+    "socket.io": "^4.8.3",
     "upnp-device-client": "^1.0.2",
     "xml2js": "^0.6.2"
+  },
+  "devDependencies": {
+    "@eslint/css": "^0.14.1",
+    "@eslint/js": "^9.39.2",
+    "@eslint/json": "^0.14.0",
+    "@eslint/markdown": "^7.5.1",
+    "eslint": "^9.39.2",
+    "globals": "^16.5.0"
   }
 }
