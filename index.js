@@ -32,10 +32,10 @@ const app = express();
 const http = require("http");
 // const https = require("https");
 const SSDP = require("node-ssdp").Client;
-const UPNP = require("upnp-device-client");
+// const UPNP = require("upnp-device-client");
 
 // const path = require("path");
-const xml2js = require("xml2js");
+// const xml2js = require("xml2js");
 // const cheerio = require("cheerio");
 const bodyParser = require("body-parser");
 
@@ -50,7 +50,7 @@ const ssdpClient = new SSDP({ explicitSocketBind: true });
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 
-let xml = "";
+// let xml = "";
 let devices = {};
 // let devicesByLocation = [];
 let selectedDevice = undefined;
