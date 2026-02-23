@@ -129,24 +129,25 @@ const UPnPExplorer = (() => {
     }
 
     function renderDevices(devices) {
+        console.log('Rendering devices:', devices);
         if (!devices.length) {
-            devicesContainer.innerHTML = `<em>No devices discovered</em>`;
+            devicesContainer.innerHTML = `<em>No devices discovered yet. Wait or press Discover.</em>`;
             return;
         }
 
         devicesContainer.innerHTML = devices.map(d => {
-            const udn = d.device?.UDN?.[0];
-            const name = d.device?.friendlyName?.[0] || 'Unknown Device';
-            const ip = d.ip?.address || 'unknown';
-            const type = d.device?.deviceType?.[0] || '';
+            const id = d.id || d.device?.UDN || 'unknown';
+            const name = d.device?.friendlyName || 'Unknown Device';
+            const ip = d.ip || 'unknown';
+            const type = d.device?.deviceType || '';
 
             return `
-        <div class="list-item" data-device-id="${udn}">
-          ${name}
-          <small>${ip}</small>
-          <small>${type}</small>
-        </div>
-      `;
+                <div class="list-item" data-device-id="${id}">
+                ${name}
+                <small>${ip}</small>
+                <small>${type}</small>
+                </div>
+            `;
         }).join('');
 
         bindDeviceSelection();
@@ -157,6 +158,7 @@ const UPnPExplorer = (() => {
             item.onclick = (e) => {
                 e.stopPropagation();
 
+                // console.log('Device item clicked:', item.dataset.deviceId);
                 const deviceUdn = item.dataset.deviceId;
                 state.selectedService = null;
 
@@ -178,15 +180,15 @@ const UPnPExplorer = (() => {
         }
 
         servicesContainer.innerHTML = services.map(s => {
-            const id = s.serviceId?.[0];
-            const type = s.serviceType?.[0];
+            const id = s.serviceId;
+            const type = s.serviceType;
 
             return `
-        <div class="list-item" data-service-id="${id}">
-          ${id}
-          <small>${type}</small>
-        </div>
-      `;
+                <div class="list-item" data-service-id="${id}">
+                ${id}
+                <small>${type}</small>
+                </div>
+            `;
         }).join('');
 
         bindServiceSelection();
@@ -207,11 +209,11 @@ const UPnPExplorer = (() => {
      * Actions (Panel 3)
      * ========================= */
     /**
- * Render actions / SCPD XML for the selected service.
- *
- * @param {string} xml
- *   Raw SCPD XML received from the backend.
- */
+     * Render actions / SCPD XML for the selected service.
+     *
+     * @param {string} xml
+     *   Raw SCPD XML received from the backend.
+     */
     function renderActions(xml) {
         if (!xml || typeof xml !== 'string') {
             actionsContainer.innerHTML = `<em>No action data available</em>`;
@@ -219,10 +221,10 @@ const UPnPExplorer = (() => {
         }
 
         actionsContainer.innerHTML = `
-    <div class="scp-container">
-      <pre class="scp-xml"></pre>
-    </div>
-  `;
+            <div class="scp-container">
+            <pre class="scp-xml"></pre>
+            </div>
+        `;
 
         // Use textContent to avoid HTML/XML injection issues
         actionsContainer
@@ -235,7 +237,12 @@ const UPnPExplorer = (() => {
      * Socket Events
      * ========================= */
     function bindSocketEvents() {
-        socket.on('connect', requestDevices);
+        socket.on('connect', () => {
+            console.log('Socket connected:', socket.id);
+            requestDevices();
+            // Wait a moment to ensure the server is ready
+            setTimeout(requestDevices, 5000)
+        });
 
         socket.on('devices', (devices) => {
             state.devices = devices;

@@ -31,7 +31,7 @@ const express = require("express");
 const app = express();
 const http = require("http");
 // const https = require("https");
-const SSDP = require("node-ssdp").Client;
+// const SSDP = require("node-ssdp").Client;
 // const UPNP = require("upnp-device-client");
 
 // const path = require("path");
@@ -45,44 +45,65 @@ var io = require("socket.io")(webServer, {
     origin: "*",
   },
 });
-const ssdpClient = new SSDP({ explicitSocketBind: true });
+// const ssdpClient = new SSDP({ explicitSocketBind: true });
 
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 
 // let xml = "";
 let devices = {};
+// let devicesN = {};
 // let devicesByLocation = [];
 let selectedDevice = undefined;
 // var upnpClient = undefined;
 
+// New SSDP device event handling
+const SSDPDiscovery = require('./lib/SSDPDiscovery');
+
+const discovery = new SSDPDiscovery({
+  scanDuration: 5000
+});
+
+// discovery.on('device-found', (device) => {
+//     // In je app kun je nog steeds console.log gebruiken, 
+//     // terwijl de library zelf stilletjes logt via 'debug'
+//     console.log(`Device found: ${device.friendlyName} @ ${device.ip}`);
+// });
+
+discovery.on('scan-complete', (devicesFound) => {
+  console.log(`Scan completed. Found ${devicesFound.length} unique services.`);
+  devices = devicesFound;
+});
+
+discovery.start();
+
 // ==================== pulling upnp devices ====================
-(async () => {
-  try {
-    const mod = await import('./modules/ssdp-discovery.mjs');
-    const startDiscovery = mod.startDiscovery || mod.default;
-    const discovery = startDiscovery();
+// (async () => {
+//   try {
+//     const mod = await import('./modules/ssdp-discovery.mjs');
+//     const startDiscovery = mod.startDiscovery || mod.default;
+//     const discovery = startDiscovery();
 
-    discovery.on('device', (d) => {
-      // console.log('Discovered device:', d);
-      // devices.push(d);
-      const key = d.ssdp.LOCATION
-      // const key = d.friendlyName || (d.extendedInfo && d.extendedInfo.friendlyName) || '';
-      devices[key] = {
-        ...d,
-        //   ...(d.extendedInfo || {}),
-        //   ...(d.deviceInfo || {}),
-      };
-      // devicesByLocation.push(d.deviceInfo || {});
-    });
+//     discovery.on('device', (d) => {
+//       // console.log('Discovered device:', d);
+//       // devices.push(d);
+//       const key = d.ssdp.LOCATION
+//       // const key = d.friendlyName || (d.extendedInfo && d.extendedInfo.friendlyName) || '';
+//       devices[key] = {
+//         ...d,
+//         //   ...(d.extendedInfo || {}),
+//         //   ...(d.deviceInfo || {}),
+//       };
+//       // devicesByLocation.push(d.deviceInfo || {});
+//     });
 
-    discovery.on('error', (err) => {
-      console.error('SSDP discovery error:', err);
-    });
-  } catch (e) {
-    console.error('Failed to load ssdp-discovery module:', e);
-  }
-})();
+//     discovery.on('error', (err) => {
+//       console.error('SSDP discovery error:', err);
+//     });
+//   } catch (e) {
+//     console.error('Failed to load ssdp-discovery module:', e);
+//   }
+// })();
 
 // ==================== hosting UI ====================
 app.use(express.static(__dirname + "/public"));
@@ -102,45 +123,58 @@ io.on("connection", (socket) => {
   // On discover request, trigger SSDP search
   // Then after a delay, emit the current list of devices
   socket.on("discover", () => {
-    ssdpClient.search("ssdp:all");
+    // ssdpClient.search("ssdp:all");
     console.log("socket:discover: SSDP search triggered");
-    setTimeout(() => {
-      let result = [];
-      for (const key in devices) {
-        result.push(devices[key]);
-      }
-      sortDevices(result);
-      // console.log("socket:discover: emitting devices", result);
-      socket.emit("devices", result);
-    }, 5000); // 5s delay for responses
+    discovery.start();
+
+    discovery.on('scan-complete', (devicesFound) => {
+      console.log(`Scan completed. Found ${devicesFound.length} unique services.`);
+      devices = devicesFound;
+      socket.emit("devices", devices);
+    });
+
+    // setTimeout(() => {
+    //   let result = [];
+    //   for (const key in devices) {
+    //     result.push(devices[key]);
+    //   }
+    //   sortDevices(result);
+    //   // console.log("socket:discover: emitting devices", result);
+    //   socket.emit("devices", result);
+    // }, 5000); // 5s delay for responses
   });
 
   // On devices request, emit the current list of discovered devices
   socket.on("devices", () => {
-    let result = [];
-    for (const key in devices) {
-      result.push(devices[key]);
-    }
-    sortDevices(result);
+    console.log("socket:devices: requested");
+    // let result = [];
+    // for (const key in devices) {
+    //   result.push(devices[key]);
+    // }
+    // sortDevices(result);
     // console.log("socket:devices:", result);
-    socket.emit("devices", result);
+    socket.emit("devices", devices);
   });
 
   // On services request, emit the services for the selected device
   socket.on("services", (msg) => {
-    console.log("socket:services: requested for deviceUdn", msg);
+    // console.log("socket:services: requested for deviceUdn", msg);
     // Grab from the devices list with matching UDN
-    selectedDevice = null;
-    for (const key in devices) {
-      const d = devices[key];
-      const udn = d.device && d.device.UDN ? d.device.UDN[0] : null;
-      if (udn === msg) {
-        selectedDevice = d;
-        break;
-      }
+    selectedDevice = devices.find(d => d.id === msg);
+    // for (const key in devices) {
+    //   const d = devices[key];
+    //   const udn = d.device && d.device.UDN ? d.device.UDN : null;
+    //   if (udn === msg) {
+    //     selectedDevice = d;
+    //     break;
+    //   }
+    // }
+    if (!selectedDevice) {
+      socket.emit("services", []);
+      return;
     }
-    // console.log("socket:services: selectedDevice", selectedDevice.device.serviceList[0]);
-    socket.emit("services", selectedDevice.device.serviceList[0]);
+    // console.log("socket:services: selectedDevice", selectedDevice);
+    socket.emit("services", selectedDevice.device.serviceList);
     // if (selectedDevice) {
     //   upnpClient = new UPNP(selectedDevice.ssdp.location);
     //   upnpClient.getServices((err, services) => {
@@ -164,28 +198,29 @@ io.on("connection", (socket) => {
   socket.on("actions", (msg) => {
     console.log("socket:actions: requested action", msg);
     // Grab the device based on the msg.deviceUdn
-    selectedDevice = null;
-    for (const key in devices) {
-      const d = devices[key];
-      const udn = d.device && d.device.UDN ? d.device.UDN[0] : null;
-      if (udn === msg.deviceUdn) {
-        selectedDevice = d;
-        break;
-      }
-    }
+    selectedDevice = devices.find(d => d.id === msg.deviceUdn);
+    // for (const key in devices) {
+    //   const d = devices[key];
+    //   const udn = d.device && d.device.UDN ? d.device.UDN[0] : null;
+    //   if (udn === msg.deviceUdn) {
+    //     selectedDevice = d;
+    //     break;
+    //   }
+    // }
     // console.log("socket:actions: selectedDevice", selectedDevice);
     // Grab the SCPD URL from the selected service
     let scpdUrl = null;
     if (selectedDevice) {
-      const services = selectedDevice.device.serviceList[0].service || [];
-      for (let i = 0; i < services.length; i++) {
-        const service = services[i];
-        const serviceId = service.serviceId ? service.serviceId[0] : null;
-        if (serviceId === msg.serviceId) {
-          scpdUrl = service.SCPDURL ? service.SCPDURL[0] : null;
-          break;
-        }
-      }
+      const service = selectedDevice.device.serviceList.service.find(s => s.serviceId === msg.serviceId);
+      scpdUrl = service ? service.SCPDURL : null;
+      // for (let i = 0; i < services.length; i++) {
+      //   const service = services[i];
+      //   const serviceId = service.serviceId ? service.serviceId[0] : null;
+      //   if (serviceId === msg.serviceId) {
+      //     scpdUrl = service.SCPDURL ? service.SCPDURL[0] : null;
+      //     break;
+      //   }
+      // }
     }
     console.log("socket:actions: SCPD URL", scpdUrl);
 
@@ -211,7 +246,7 @@ io.on("connection", (socket) => {
             //   }
             //   const actionList = parsed.scpd.actionList[0].action || [];
             //   let actions = actionList.map(a => a.name[0]);
-            console.log("socket:actions: available actions", completeResponse);
+            // console.log("socket:actions: available actions", completeResponse);
             socket.emit("actions", completeResponse);
             // });
           });
@@ -236,14 +271,14 @@ webServer.listen(8080, () => {
   );
 });
 
-// Sort devices by friendly name
-function sortDevices(result) {
-  result.sort((a, b) => {
-    const nameA = (a.device && a.device.friendlyName) ? a.device.friendlyName[0].toUpperCase() : '';
-    const nameB = (b.device && b.device.friendlyName) ? b.device.friendlyName[0].toUpperCase() : '';
-    if (nameA < nameB) return -1;
-    if (nameA > nameB) return 1;
-    return 0;
-  });
-}
+// // Sort devices by friendly name
+// function sortDevices(result) {
+//   result.sort((a, b) => {
+//     const nameA = (a.device && a.device.friendlyName) ? a.device.friendlyName[0].toUpperCase() : '';
+//     const nameB = (b.device && b.device.friendlyName) ? b.device.friendlyName[0].toUpperCase() : '';
+//     if (nameA < nameB) return -1;
+//     if (nameA > nameB) return 1;
+//     return 0;
+//   });
+// }
 
