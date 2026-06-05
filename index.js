@@ -6,7 +6,7 @@
  * Responsibilities:
  * - Start an Express HTTP server serving the UI from `/public`.
  * - Start SSDP device discovery via a separate ESM module
- *   (`./modules/ssdp-discovery.mjs`) which emits `device` events.
+ *   (`./lib/ssdp-discovery.mjs`) which emits `device` events.
  * - Expose a small Socket.IO interface used by the UI to request
  *   discovered devices, services and control actions.
  *
@@ -80,7 +80,7 @@ discovery.start();
 // ==================== pulling upnp devices ====================
 // (async () => {
 //   try {
-//     const mod = await import('./modules/ssdp-discovery.mjs');
+//     const mod = await import('./lib/ssdp-discovery.mjs');
 //     const startDiscovery = mod.startDiscovery || mod.default;
 //     const discovery = startDiscovery();
 
