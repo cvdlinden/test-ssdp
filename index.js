@@ -2,6 +2,9 @@ import express from 'express';
 import { createServer } from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { startSsdpDiscovery, stopSsdpDiscovery } from './lib/socket.js';
+import { parseDeviceDescription } from './lib/parser.js';
+import * as store from './lib/store.js';
 
 // ESM environment workaround for __dirname
 const __filename = fileURLToPath(import.meta.url);
@@ -17,35 +20,92 @@ app.use(express.static(join(__dirname, 'public')));
 // Middleware to parse incoming JSON payloads (useful for Column 4 SOAP executions)
 app.use(express.json());
 
+// API endpoint to serve Column 1 and Column 2 data to the UI
+app.get('/api/devices', (req, res) => {
+    res.json(store.getAllDevices());
+});
+
 /**
  * Health check and API status endpoint
  */
 app.get('/api/status', (req, res) => {
-  res.json({ status: 'online', protocol: 'SSDP/UPnP' });
+    res.json({ status: 'online', protocol: 'SSDP/UPnP' });
 });
+
+// Central async engine to handle discovered hardware profiles
+const handleSsdpDevice = async (location, headers, rinfo, interfaceIp) => {
+    // If we are already tracking or fetching this location, skip it
+    if (store.hasDevice(location)) return;
+
+    // Set an early lock to prevent duplicate fetches across interfaces
+    store.saveDevice(location, { friendlyName: 'Fetching description...', status: 'fetching', location: location });
+    // console.log(store.getAllDevices());
+    console.log(`\x1b[34m[HTTP Fetch]\x1b[0m Downloading descriptor: ${location}`);
+
+    try {
+        // Native Node v24 fetch with a 4-second timeout abort signal
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 4000);
+
+        const response = await fetch(location, { signal: controller.signal });
+        clearTimeout(timeoutId);
+
+        if (!response.ok) throw new Error(`HTTP status ${response.status}`);
+
+        const xmlText = await response.text();
+        const deviceData = parseDeviceDescription(xmlText);
+
+        if (!deviceData) {
+            throw new Error('XML descriptor did not contain a valid UPnP root structure.');
+        }
+
+        const deviceRecord = {
+            id: deviceData.udn || location,
+            location,
+            ip: rinfo.address,
+            interface: interfaceIp,
+            friendlyName: deviceData.friendlyName,
+            manufacturer: deviceData.manufacturer,
+            modelName: deviceData.modelName,
+            deviceType: deviceData.deviceType,
+            services: deviceData.services,
+            status: 'done'
+        };
+
+        // Commit completely parsed model schema to our state store
+        store.saveDevice(location, deviceRecord);
+
+        console.log(`\x1b[32m[Device Ready]\x1b[0m Successfully mapped: \x1b[1m${deviceRecord.friendlyName}\x1b[0m (${deviceRecord.services.length} services found)`);
+
+    } catch (err) {
+        console.error(`\x1b[31m[Device Failed]\x1b[0m Lost device metadata tracking for ${location}:`, err.message);
+        // Remove from store so a re-scan can try fetching again
+        // store.deleteDevice(location); // Optional wrapper
+    }
+};
 
 // Start the HTTP Server
 server.listen(PORT, () => {
-  console.log(`\x1b[32m[Server]\x1b[0m Dashboard is live at http://localhost:${PORT}`);
-  
-  // TODO: Initialize UDP SSDP Socket here
-  // startSsdpSocket();
+    console.log(`\x1b[32m[Server]\x1b[0m Dashboard is live at http://localhost:${PORT}`);
+
+    // Start the proven multi-interface discovery strategy
+    startSsdpDiscovery(handleSsdpDevice);
 });
 
 /**
  * Gracefully shuts down the application by releasing network resources
  */
 const shutdown = () => {
-  console.log('\n\x1b[33m[Server]\x1b[0m Shutting down application...');
-  
-  server.close(() => {
-    console.log('\x1b[32m[Server]\x1b[0m HTTP server closed successfully.');
-    
-    // TODO: Close UDP Socket here to prevent port binding hanging
-    // closeSsdpSocket();
-    
-    process.exit(0);
-  });
+    console.log('\n\x1b[33m[Server]\x1b[0m Shutting down application...');
+
+    // Stop SSDP discovery and clear the device registry
+    stopSsdpDiscovery();
+    //store.clearDevices();
+
+    server.close(() => {
+        console.log('\x1b[32m[Server]\x1b[0m HTTP server closed successfully.');
+        process.exit(0);
+    });
 };
 
 // Catch process termination signals for clean exit
