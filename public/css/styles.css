@@ -34,12 +34,13 @@
   --border: #334155;
   --text: #e5e7eb;
   --muted: #9ca3af;
-  --accent: #3b82f6;
+  --accent: #04d361;
+  /* Green accent color */
 }
 
 * {
   box-sizing: border-box;
-  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  font-family: system-ui, -apple-system, sans-serif;
 }
 
 body {
@@ -62,19 +63,23 @@ body {
   background: var(--panel-bg);
   border-right: 1px solid var(--border);
   transition: all 0.3s ease;
-  min-width: 280px;
+  min-width: 250px;
   cursor: pointer;
-}
+  /* flex: 1; Distribute columns evenly initially */
 
-.panel.active {
-  flex: 1;
-  background: var(--panel-active);
-  cursor: default;
-}
+  &.active {
+    /* Give the focused workflow column a bit more breathing room */
+    flex: 1.5;
+    background: var(--panel-active);
+    cursor: default;
+  }
 
-.panel.inactive {
-  width: 300px;
-  flex-shrink: 0;
+  &.inactive {
+    width: 300px;
+    flex-shrink: 0;
+    opacity: 0.7;
+    background: var(--panel-bg);
+  }
 }
 
 .panel-header {
@@ -93,43 +98,65 @@ body {
 .toolbar {
   display: flex;
   gap: 6px;
-}
+  min-height: 32px;
 
-.toolbar button {
-  background: transparent;
-  border: 1px solid var(--border);
-  color: var(--text);
-  padding: 4px 8px;
-  font-size: 12px;
-  cursor: pointer;
-}
+  button {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 4px 8px;
+    font-size: 12px;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: all 0.2s;
 
-.toolbar button:hover {
-  border-color: var(--accent);
-  color: var(--accent);
+    &:hover:not(:disabled) {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    &:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+  }
 }
 
 .panel-content {
   padding: 12px;
   overflow-y: auto;
   flex: 1;
+  font-size: 14px;
+
+  em {
+    color: var(--muted);
+    font-style: italic;
+    display: block;
+    text-align: center;
+    margin-top: 2rem;
+  }
 }
 
 .list-item {
   padding: 10px;
   border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.02);
   margin-bottom: 8px;
   cursor: pointer;
-}
+  border-radius: 4px;
+  transition: border-color 0.2s;
 
-.list-item:hover {
-  border-color: var(--accent);
-}
+  &:hover {
+    border-color: var(--accent);
+  }
 
-.list-item small {
-  display: block;
-  color: var(--muted);
-  font-size: 11px;
+  small {
+    display: block;
+    color: var(--muted);
+    font-size: 11px;
+    margin-top: 4px;
+    word-break: break-all;
+  }
 }
 
 pre {
@@ -138,4 +165,5 @@ pre {
   font-size: 12px;
   overflow-x: auto;
   border: 1px solid var(--border);
+  border-radius: 4px;
 }

@@ -4,6 +4,9 @@
  *
  * Frontend logic for the UPnP Explorer SPA.
  *
+ * @fileoverview Frontend architecture for the 4-column UPnP Explorer SPA.
+ * Encapsulated within a tight revealing module pattern namespace.
+ * 
  * DESIGN PRINCIPLES
  * -----------------
  * - Single source of truth: browser history state
@@ -17,275 +20,245 @@
  *   2 = Actions  (per service)
  */
 
+'use strict';
+
 const UPnPExplorer = (() => {
-    'use strict';
-
     /* =========================
-     * Socket
-     * ========================= */
-    const socket = io();
-
-    /* =========================
-     * State
+     * Private State
      * ========================= */
     const state = {
-        devices: [],
-        services: [],
-        selectedDevice: null,
-        selectedService: null
+        /** @type {Map<string, Object>} */
+        devices: new Map(),
+        selectedDeviceLocation: null,
+        selectedServiceId: null,
+        selectedActionName: null
     };
 
     /* =========================
      * DOM References
      * ========================= */
     const panels = document.querySelectorAll('.panel');
-
-    const devicesContainer =
-        document.querySelector('[data-panel="0"] .panel-content');
-
-    const servicesContainer =
-        document.getElementById('services');
-
-    const actionsContainer =
-        document.getElementById('actions');
-
-    const discoverButton =
-        document.querySelector('[data-panel="0"] .toolbar button');
+    const devicesContainer = document.getElementById('devices-container');
+    const servicesContainer = document.getElementById('services-container');
+    const actionsContainer = document.getElementById('actions-container');
+    const playgroundContainer = document.getElementById('playground-container');
+    const discoverButton = document.getElementById('btn-discover');
 
     /* =========================
-     * Panel Management
+     * UI & Panel Management
      * ========================= */
-    function activatePanel(index) {
+    /**
+     * Toggles the visually focused column block based on depth level.
+     * @param {number} activeIndex 
+     */
+    function activatePanel(activeIndex) {
         panels.forEach((panel, i) => {
-            panel.classList.toggle('active', i === index);
-            panel.classList.toggle('inactive', i !== index);
+            panel.classList.toggle('active', i === activeIndex);
+            panel.classList.toggle('inactive', i !== activeIndex);
         });
     }
 
     /* =========================
-     * History / Navigation
+     * History & Navigation Routing
      * ========================= */
-    function pushNavigationState(level, deviceUdn = null, serviceId = null) {
-        const navState = { level, deviceUdn, serviceId };
+    /**
+     * Updates browser history and view state seamlessly.
+     */
+    function pushNavigationState(level, location = null, serviceId = null, actionName = null) {
+        const navState = { level, location, serviceId, actionName };
         history.pushState(navState, '', '');
         applyNavigationState(navState);
     }
 
+    /**
+     * Orchestrates rendering based on step depth.
+     * @param {Object} navState 
+     */
     function applyNavigationState(navState) {
         if (!navState) return;
 
-        state.selectedDevice = navState.deviceUdn;
-        state.selectedService = navState.serviceId;
+        state.selectedDeviceLocation = navState.location;
+        state.selectedServiceId = navState.serviceId;
+        state.selectedActionName = navState.actionName;
 
         activatePanel(navState.level);
 
-        /* Panel 0: Devices */
+        // Reset subordinate columns on backward navigation
         if (navState.level === 0) {
+            servicesContainer.innerHTML = '<em>Select a device first</em>';
+            actionsContainer.innerHTML = '<em>Select a service first</em>';
+            playgroundContainer.innerHTML = '<em>Select an action first</em>';
             return;
         }
 
-        /* Panel 1: Services */
-        if (navState.level === 1 && navState.deviceUdn) {
-            servicesContainer.innerHTML = `<em>Loading services…</em>`;
-            socket.emit('services', navState.deviceUdn);
-            return;
-        }
-
-        /* Panel 2: Actions */
-        if (
-            navState.level === 2 &&
-            navState.deviceUdn &&
-            navState.serviceId
-        ) {
-            actionsContainer.innerHTML = `<em>Loading actions…</em>`;
-            socket.emit('actions', { deviceUdn: navState.deviceUdn, serviceId: navState.serviceId });
+        if (navState.level === 1 && navState.location) {
+            actionsContainer.innerHTML = '<em>Select a service first</em>';
+            playgroundContainer.innerHTML = '<em>Select an action first</em>';
+            renderServices(navState.location);
         }
     }
 
     function bindHistoryEvents() {
-        window.addEventListener('popstate', (e) => {
-            applyNavigationState(e.state);
-        });
+        console.log('Init: Binding history navigation events...');
+        window.addEventListener('popstate', (e) => applyNavigationState(e.state));
     }
 
     /* =========================
-     * Devices
-     * ========================= */
-    function requestDevices() {
-        devicesContainer.innerHTML = `<em>Fetching devices…</em>`;
-        socket.emit('devices');
-    }
-
-    function discoverDevices() {
-        discoverButton.disabled = true;
-        devicesContainer.innerHTML = `<em>Rescanning devices…</em>`;
-        socket.emit('discover');
-
-        socket.once('devices', (devices) => {
-            discoverButton.disabled = false;
-            state.devices = devices;
-            renderDevices(devices);
-        });
-    }
-
-    function renderDevices(devices) {
-        console.log('Rendering devices:', devices);
-        if (!devices.length) {
-            devicesContainer.innerHTML = `<em>No devices discovered yet. Wait or press Discover.</em>`;
-            return;
-        }
-
-        devicesContainer.innerHTML = devices.map(d => {
-            const id = d.id || d.device?.UDN || 'unknown';
-            const name = d.device?.friendlyName || 'Unknown Device';
-            const ip = d.ip || 'unknown';
-            const type = d.device?.deviceType || '';
-
-            return `
-                <div class="list-item" data-device-id="${id}">
-                ${name}
-                <small>${ip}</small>
-                <small>${type}</small>
-                </div>
-            `;
-        }).join('');
-
-        bindDeviceSelection();
-    }
-
-    function bindDeviceSelection() {
-        document.querySelectorAll('[data-device-id]').forEach(item => {
-            item.onclick = (e) => {
-                e.stopPropagation();
-
-                // console.log('Device item clicked:', item.dataset.deviceId);
-                const deviceUdn = item.dataset.deviceId;
-                state.selectedService = null;
-
-                pushNavigationState(1, deviceUdn);
-            };
-        });
-    }
-
-    /* =========================
-     * Services (Panel 2)
-     * ========================= */
-    function renderServices(payload) {
-        const services = payload?.service || [];
-        state.services = services;
-
-        if (!services.length) {
-            servicesContainer.innerHTML = `<em>No services found</em>`;
-            return;
-        }
-
-        servicesContainer.innerHTML = services.map(s => {
-            const id = s.serviceId;
-            const type = s.serviceType;
-
-            return `
-                <div class="list-item" data-service-id="${id}">
-                ${id}
-                <small>${type}</small>
-                </div>
-            `;
-        }).join('');
-
-        bindServiceSelection();
-    }
-
-    function bindServiceSelection() {
-        document.querySelectorAll('[data-service-id]').forEach(item => {
-            item.onclick = (e) => {
-                e.stopPropagation();
-
-                const serviceId = item.dataset.serviceId;
-                pushNavigationState(2, state.selectedDevice, serviceId);
-            };
-        });
-    }
-
-    /* =========================
-     * Actions (Panel 3)
+     * Data Rendering (Columns)
      * ========================= */
     /**
-     * Render actions / SCPD XML for the selected service.
-     *
-     * @param {string} xml
-     *   Raw SCPD XML received from the backend.
+     * Renders list items for Column 1 (Devices).
      */
-    function renderActions(xml) {
-        if (!xml || typeof xml !== 'string') {
-            actionsContainer.innerHTML = `<em>No action data available</em>`;
+    function renderDeviceList() {
+        console.log('Rendering devices:', state.devices);
+        if (state.devices.size === 0) {
+            devicesContainer.innerHTML = '<em>No devices discovered yet.</em>';
             return;
         }
 
-        actionsContainer.innerHTML = `
-            <div class="scp-container">
-            <pre class="scp-xml"></pre>
-            </div>
-        `;
+        devicesContainer.innerHTML = Array.from(state.devices.values()).map(d => {
+            const name = d.friendlyName || 'Unknown Device';
+            const ip = d.ip || '0.0.0.0';
+            const model = d.modelName || 'Generic';
+            const safeId = btoa(d.location).replace(/=/g, '');
+            const deviceType = d.deviceType || '';
+            const location = d.location || '';
 
-        // Use textContent to avoid HTML/XML injection issues
-        actionsContainer
-            .querySelector('.scp-xml')
-            .textContent = xml;
+            return `
+                <div class="list-item" id="dev-${safeId}" data-location="${d.location}">
+                <strong>${name}</strong>
+                <small>${model} • ${ip}</small>
+                <small>${deviceType}</small>
+                <small>${location}</small>
+                </div>
+            `;
+        }).join('');
+
+        // Attach click listeners to device cards
+        devicesContainer.querySelectorAll('.list-item').forEach(item => {
+            item.onclick = (e) => {
+                e.stopPropagation();
+                const loc = item.getAttribute('data-location');
+                console.log('Device item clicked:', loc);
+                pushNavigationState(1, loc);
+            };
+        });
     }
 
+    /**
+     * Populates Column 2 with the services of the selected device.
+     * @param {string} location 
+     */
+    function renderServices(location) {
+        const device = state.devices.get(location);
+        if (!device || !device.services || device.services.length === 0) {
+            servicesContainer.innerHTML = '<em>No services available for this unit.</em>';
+            return;
+        }
 
-    /* =========================
-     * Socket Events
-     * ========================= */
-    function bindSocketEvents() {
-        socket.on('connect', () => {
-            console.log('Socket connected:', socket.id);
-            requestDevices();
-            // Wait a moment to ensure the server is ready
-            setTimeout(requestDevices, 5000)
+        servicesContainer.innerHTML = device.services.map(s => {
+            return `
+        <div class="list-item" data-service-id="${s.serviceId}">
+          <strong>${s.serviceId}</strong>
+          <small>${s.serviceType}</small>
+        </div>
+      `;
+        }).join('');
+
+        // Attach click listeners to service cards
+        servicesContainer.querySelectorAll('.list-item').forEach(item => {
+            item.onclick = (e) => {
+                e.stopPropagation();
+                const serviceId = item.getAttribute('data-service-id');
+                console.log('Selected service routing triggered for:', serviceId);
+                // Next step: pushNavigationState(2, location, serviceId);
+            };
         });
-
-        socket.on('devices', (devices) => {
-            state.devices = devices;
-            renderDevices(devices);
-        });
-
-        socket.on('services', renderServices);
-
-        socket.on('actions', renderActions);
     }
 
     /* =========================
-     * UI Events
+     * Network Pipelines (SSE)
      * ========================= */
-    function bindUIActions() {
-        discoverButton.onclick = (e) => {
-            e.stopPropagation();
-            discoverDevices();
+    /**
+     * Connects to the backend Server-Sent Events (SSE) data stream.
+     */
+    function initializeSsePipeline() {
+        console.log('Init: real-time event stream connection...');
+        const eventSource = new EventSource('/api/events');
+
+        eventSource.addEventListener('device-added', (e) => {
+            console.log('Received device-added event:', e.data);
+            const device = JSON.parse(e.data);
+            state.devices.set(device.location, device);
+            renderDeviceList();
+        });
+
+        eventSource.onerror = () => {
+            console.warn('Real-time network event link dropped. Re-establishing connection...');
         };
     }
 
     /* =========================
-     * Init
+     * UI Action Bindings
      * ========================= */
-    function init() {
-        bindSocketEvents();
+    function bindUIActions() {
+        console.log('Init: Binding UI actions...');
+        discoverButton.onclick = async (e) => {
+            console.log('Discover button clicked. Triggering device scan...');
+            e.stopPropagation();
+            discoverButton.disabled = true;
+            devicesContainer.innerHTML = '<em>Triggering network probe...</em>';
+
+            try {
+                // Trigger a fresh active M-SEARCH probe via the backend API
+                await fetch('/api/discover', { method: 'POST' });
+                console.log('Network rediscovery triggered.');
+            } catch (err) {
+                console.error('Failed to trigger scan:', err);
+            } finally {
+                // Re-enable the button after 3 seconds (after the MX time has likely elapsed)
+                setTimeout(() => {
+                    discoverButton.disabled = false;
+                }, 3000);
+            }
+        };
+    }
+
+    /* =========================
+     * Public Initialization API
+     * ========================= */
+    async function init() {
+        initializeSsePipeline();
         bindUIActions();
         bindHistoryEvents();
 
-        history.replaceState(
-            { level: 0, deviceUdn: null, serviceId: null },
-            '',
-            ''
-        );
+        // Establish default root history profile state
+        history.replaceState({ level: 0, location: null, serviceId: null, actionName: null }, '', '');
 
-        devicesContainer.innerHTML = `<em>Waiting for connection…</em>`;
+        // Get devices that the backend has already discovered during startup and render them immediately!
+        try {
+            const response = await fetch('/api/devices');
+            const existingDevices = await response.json();
+
+            existingDevices.forEach(device => {
+                // Only add devices that have completed the fetch-and-parse cycle during backend startup
+                if (device.status === 'done' || device.friendlyName) {
+                    state.devices.set(device.location, device);
+                }
+            });
+
+            // Render the initial list of devices in Column 1
+            renderDeviceList();
+        } catch (err) {
+            console.error('Failed to load initial cache:', err);
+        }
     }
 
     return { init };
 })();
 
 /* =========================
- * Bootstrap
+ * Application Bootstrap
  * ========================= */
 document.addEventListener('DOMContentLoaded', () => {
     UPnPExplorer.init();
