@@ -149,6 +149,11 @@ const UPnPExplorer = (() => {
         devicesContainer.querySelectorAll('.list-item').forEach(item => {
             item.onclick = (e) => {
                 e.stopPropagation();
+
+                // Remove 'selected' class from all items, then add to the clicked one
+                devicesContainer.querySelectorAll('.list-item').forEach(el => el.classList.remove('selected'));
+                item.classList.add('selected');
+
                 const loc = item.getAttribute('data-location');
                 console.log('Device item clicked:', loc);
                 pushNavigationState(1, loc);
@@ -210,6 +215,11 @@ const UPnPExplorer = (() => {
         servicesContainer.querySelectorAll('.service-item').forEach(item => {
             item.onclick = (e) => {
                 e.stopPropagation();
+
+                // Remove 'selected' class from all services, then add to the clicked one
+                servicesContainer.querySelectorAll('.service-item').forEach(el => el.classList.remove('selected'));
+                item.classList.add('selected');
+
                 const serviceId = item.getAttribute('data-service-id');
                 const scpdUrl = item.getAttribute('data-scpd-url');
 
@@ -306,6 +316,11 @@ const UPnPExplorer = (() => {
             actionsContainer.querySelectorAll('.action-item').forEach(item => {
                 item.onclick = (e) => {
                     e.stopPropagation();
+
+                    // Remove 'selected' class from all items, then add to the clicked one
+                    actionsContainer.querySelectorAll('.action-item').forEach(el => el.classList.remove('selected'));
+                    item.classList.add('selected');
+
                     const actionName = item.getAttribute('data-action-name');
 
                     // Store the full schema definition for this action inside the state map temporarily for Column 4 access
