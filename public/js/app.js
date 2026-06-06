@@ -1,11 +1,9 @@
 /**
  * @file app.js
  * @namespace UPnPExplorer
- *
- * Frontend logic for the UPnP Explorer SPA.
- *
  * @fileoverview Frontend architecture for the 4-column UPnP Explorer SPA.
  * Encapsulated within a tight revealing module pattern namespace.
+ * Frontend logic for the UPnP Explorer SPA.
  * 
  * DESIGN PRINCIPLES
  * -----------------
@@ -18,6 +16,7 @@
  *   0 = Devices
  *   1 = Services (per device)
  *   2 = Actions  (per service)
+ *   3 = Playground (dynamic form generation based on action schema)
  */
 
 'use strict';
