@@ -39,20 +39,29 @@ function broadcastToFrontend(eventName, data) {
     }
 }
 
+// Basic API endpoint to confirm server is running and provide metadata
+app.get('/api', (req, res) => {
+  res.json({
+    message: "Welcome to the UPnP Explorer API",
+    version: "1.3.0",
+    endpoints: {
+      events: "GET /api/events (Server-Sent Events)",
+      devices: "GET /api/devices",
+      serviceSchema: "GET /api/services/schema?location={location}&scpdUrl={scpdUrl}",
+      executeAction: "POST /api/services/execute",
+      discover: "POST /api/discover",
+      status: "GET /api/status"
+    }
+  });
+});
+
 // REST API to fetch a snapshot of current memory
 app.get('/api/devices', (req, res) => {
     res.json(store.getAllDevices());
 });
 
-// REST API to trigger a new active network scan (Column 1 refresh)
-app.post('/api/discover', (req, res) => {
-    // Restart the multi-interface discovery engine using our existing handler
-    startSsdpDiscovery(handleSsdpDevice);
-    res.json({ status: 'scan_triggered' });
-});
-
 // API endpoint to fetch and parse a specific service's actions (Column 3)
-app.get('/api/service-proxy', async (req, res) => {
+app.get('/api/services/schema', async (req, res) => {
     const { location, scpdUrl } = req.query;
 
     if (!location || !scpdUrl) {
@@ -103,6 +112,13 @@ app.get('/api/events', (req, res) => {
     req.on('close', () => {
         sseClients.delete(res);
     });
+});
+
+// REST API to trigger a new active network scan (Column 1 refresh)
+app.post('/api/discover', (req, res) => {
+    // Restart the multi-interface discovery engine using our existing handler
+    startSsdpDiscovery(handleSsdpDevice);
+    res.json({ status: 'scan_triggered' });
 });
 
 /**

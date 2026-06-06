@@ -1,11 +1,9 @@
 /**
  * @file app.js
  * @namespace UPnPExplorer
- *
- * Frontend logic for the UPnP Explorer SPA.
- *
  * @fileoverview Frontend architecture for the 4-column UPnP Explorer SPA.
  * Encapsulated within a tight revealing module pattern namespace.
+ * Frontend logic for the UPnP Explorer SPA.
  * 
  * DESIGN PRINCIPLES
  * -----------------
@@ -18,6 +16,7 @@
  *   0 = Devices
  *   1 = Services (per device)
  *   2 = Actions  (per service)
+ *   3 = Playground (dynamic form generation based on action schema)
  */
 
 'use strict';
@@ -229,7 +228,7 @@ const UPnPExplorer = (() => {
         actionsContainer.innerHTML = '<em>Loading service actions...</em>';
 
         try {
-            const response = await fetch(`/api/service-proxy?location=${encodeURIComponent(location)}&scpdUrl=${encodeURIComponent(scpdUrl)}`);
+            const response = await fetch(`/api/services/schema?location=${encodeURIComponent(location)}&scpdUrl=${encodeURIComponent(scpdUrl)}`);
             if (!response.ok) throw new Error('Proxy communication failure');
 
             const data = await response.json(); // Data contains { actions: [], stateVariables: {} }
@@ -334,8 +333,8 @@ const UPnPExplorer = (() => {
         const eventSource = new EventSource('/api/events');
 
         eventSource.addEventListener('device-added', (e) => {
-            console.log('Received device-added event:', e.data);
             const device = JSON.parse(e.data);
+            console.log('Received device-added event:', device);
             state.devices.set(device.location, device);
             renderDeviceList();
         });
