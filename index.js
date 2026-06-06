@@ -3,7 +3,7 @@ import { createServer } from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { startSsdpDiscovery, stopSsdpDiscovery } from './lib/socket.js';
-import { parseDeviceDescription } from './lib/parser.js';
+import { parseDeviceDescription, parseServiceDescription } from './lib/parser.js';
 import * as store from './lib/store.js';
 
 // ESM environment workaround for __dirname
@@ -46,10 +46,45 @@ app.get('/api/devices', (req, res) => {
 
 // REST API to trigger a new active network scan (Column 1 refresh)
 app.post('/api/discover', (req, res) => {
-  // Restart the multi-interface discovery engine using our existing handler
-  startSsdpDiscovery(handleSsdpDevice);
-  res.json({ status: 'scan_triggered' });
+    // Restart the multi-interface discovery engine using our existing handler
+    startSsdpDiscovery(handleSsdpDevice);
+    res.json({ status: 'scan_triggered' });
 });
+
+// API endpoint to fetch and parse a specific service's actions (Column 3)
+app.get('/api/service-proxy', async (req, res) => {
+    const { location, scpdUrl } = req.query;
+
+    if (!location || !scpdUrl) {
+        return res.status(400).json({ error: 'Missing required query parameters: location and scpdUrl' });
+    }
+
+    try {
+        // Resolve the relative SCPDURL against the base location URL of the device
+        const baseUrl = new URL(location);
+        const absoluteScpdUrl = new URL(scpdUrl, baseUrl).href;
+
+        console.log(`\x1b[34m[HTTP Fetch]\x1b[0m Downloading SCPD contract from: ${absoluteScpdUrl}`);
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 4000);
+        const response = await fetch(absoluteScpdUrl, { signal: controller.signal });
+        clearTimeout(timeoutId);
+
+        if (!response.ok) throw new Error(`Device responded with HTTP ${response.status}`);
+
+        const xmlText = await response.text();
+        const parsedService  = parseServiceDescription(xmlText);
+
+        if (!parsedService) throw new Error('Invalid SCPD layout structure.');
+
+        res.json(parsedService);
+    } catch (err) {
+        console.error(`\x1b[31m[Proxy Failed]\x1b[0m Could not retrieve service contract:`, err.message);
+        res.status(500).json({ error: 'Failed to retrieve or parse the device service contract', details: err.message });
+    }
+});
+
 
 // Real-time Event stream endpoint (Server-Sent Events)
 app.get('/api/events', (req, res) => {
