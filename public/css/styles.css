@@ -151,6 +151,15 @@ body {
     border-color: var(--accent);
   }
 
+  &.selected {
+    border-color: var(--accent);
+    background: rgba(4, 211, 97, 0.05);
+    /* Light green glow */
+    border-left: 6px solid var(--accent);
+    /* Visual indicator on the left */
+    cursor: default;
+  }
+
   small {
     display: block;
     color: var(--muted);

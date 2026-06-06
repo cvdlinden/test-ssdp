@@ -41,18 +41,18 @@ function broadcastToFrontend(eventName, data) {
 
 // Basic API endpoint to confirm server is running and provide metadata
 app.get('/api', (req, res) => {
-  res.json({
-    message: "Welcome to the UPnP Explorer API",
-    version: "1.3.0",
-    endpoints: {
-      events: "GET /api/events (Server-Sent Events)",
-      devices: "GET /api/devices",
-      serviceSchema: "GET /api/services/schema?location={location}&scpdUrl={scpdUrl}",
-      executeAction: "POST /api/services/execute",
-      discover: "POST /api/discover",
-      status: "GET /api/status"
-    }
-  });
+    res.json({
+        message: "Welcome to the UPnP Explorer API",
+        version: "1.3.0",
+        endpoints: {
+            events: "GET /api/events (Server-Sent Events)",
+            devices: "GET /api/devices",
+            serviceSchema: "GET /api/services/schema?location={location}&scpdUrl={scpdUrl}",
+            executeAction: "POST /api/services/execute",
+            discover: "POST /api/discover",
+            status: "GET /api/status"
+        }
+    });
 });
 
 // REST API to fetch a snapshot of current memory
@@ -83,7 +83,7 @@ app.get('/api/services/schema', async (req, res) => {
         if (!response.ok) throw new Error(`Device responded with HTTP ${response.status}`);
 
         const xmlText = await response.text();
-        const parsedService  = parseServiceDescription(xmlText);
+        const parsedService = parseServiceDescription(xmlText);
 
         if (!parsedService) throw new Error('Invalid SCPD layout structure.');
 
@@ -116,8 +116,14 @@ app.get('/api/events', (req, res) => {
 
 // REST API to trigger a new active network scan (Column 1 refresh)
 app.post('/api/discover', (req, res) => {
-    // Restart the multi-interface discovery engine using our existing handler
+    console.log('\x1b[33m[Server]\x1b[0m Manual rediscovery requested. Clearing cache...');
+
+    // 1. Clear the central device store so we can discover everything freshly
+    store.clearDevices();
+
+    // 2. Restart the multi-interface discovery network sockets
     startSsdpDiscovery(handleSsdpDevice);
+
     res.json({ status: 'scan_triggered' });
 });
 
