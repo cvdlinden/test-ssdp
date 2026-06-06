@@ -20,9 +20,54 @@ app.use(express.static(join(__dirname, 'public')));
 // Middleware to parse incoming JSON payloads (useful for Column 4 SOAP executions)
 app.use(express.json());
 
-// API endpoint to serve Column 1 and Column 2 data to the UI
+/** 
+ * Tracks active client SSE HTTP response streams.
+ * @type {Set<import('express').Response>} 
+ */
+const sseClients = new Set();
+
+/**
+ * Broadcasts a structured event payload to all open frontend connections.
+ * 
+ * @param {string} eventName - Type of operation (e.g., 'device-added').
+ * @param {Object} data - Clean JSON serializeable data object.
+ */
+function broadcastToFrontend(eventName, data) {
+    const formattedMessage = `event: ${eventName}\ndata: ${JSON.stringify(data)}\n\n`;
+    for (const client of sseClients) {
+        client.write(formattedMessage);
+    }
+}
+
+// REST API to fetch a snapshot of current memory
 app.get('/api/devices', (req, res) => {
     res.json(store.getAllDevices());
+});
+
+// REST API to trigger a new active network scan (Column 1 refresh)
+app.post('/api/discover', (req, res) => {
+  // Restart the multi-interface discovery engine using our existing handler
+  startSsdpDiscovery(handleSsdpDevice);
+  res.json({ status: 'scan_triggered' });
+});
+
+// Real-time Event stream endpoint (Server-Sent Events)
+app.get('/api/events', (req, res) => {
+    // Set explicit headers to keep the HTTP pipeline raw and streaming
+    res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive'
+    });
+
+    // Send an initial heartbeat/ping to seal the pipeline connection
+    res.write('event: connected\ndata: {"status":"streaming"}\n\n');
+    sseClients.add(res);
+
+    // Clean up when the user closes their browser window tab
+    req.on('close', () => {
+        sseClients.delete(res);
+    });
 });
 
 /**
@@ -76,6 +121,9 @@ const handleSsdpDevice = async (location, headers, rinfo, interfaceIp) => {
         store.saveDevice(location, deviceRecord);
 
         console.log(`\x1b[32m[Device Ready]\x1b[0m Successfully mapped: \x1b[1m${deviceRecord.friendlyName}\x1b[0m (${deviceRecord.services.length} services found)`);
+
+        // PUSH DATA LIVE: Tell the frontend that Column 1 needs an item added!
+        broadcastToFrontend('device-added', deviceRecord);
 
     } catch (err) {
         console.error(`\x1b[31m[Device Failed]\x1b[0m Lost device metadata tracking for ${location}:`, err.message);

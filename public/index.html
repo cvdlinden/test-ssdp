@@ -3,67 +3,65 @@
 
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>UPnP Explorer</title>
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="css/styles.css" />
   <link rel="icon" href="favicon.ico">
 </head>
 
 <body>
   <div class="app">
 
-    <!-- Panel 1: Devices -->
+    <!-- Panel 0: Devices -->
     <section class="panel active" data-panel="0">
       <header class="panel-header">
-        <span class="panel-title">Devices (SSDP)</span>
+        <span class="panel-title">1. Devices (SSDP)</span>
         <div class="toolbar">
-          <button>Discover</button>
-          <button>Filter</button>
+          <button id="btn-discover">Discover</button>
         </div>
       </header>
-      <div class="panel-content">
-        <div class="list-item" data-device-id="uuid:media-server-1">
-          MediaServer
-          <small>192.168.1.10 • urn:schemas-upnp-org:device:MediaServer:1</small>
-        </div>
-
-        <div class="list-item" data-device-id="uuid:igd-1">
-          Internet Gateway Device
-          <small>192.168.1.1 • urn:schemas-upnp-org:device:InternetGatewayDevice:1</small>
-        </div>
+      <div class="panel-content" id="devices-container">
+        <em>Waiting for data stream...</em>
       </div>
     </section>
 
-    <!-- Panel 2: Services -->
+    <!-- Panel 1: Services -->
     <section class="panel inactive" data-panel="1">
       <header class="panel-header">
-        <span class="panel-title">Services</span>
-        <div class="toolbar">
-          <button>Refresh</button>
-          <button>Metadata</button>
-        </div>
+        <span class="panel-title">2. Services</span>
+        <div class="toolbar"><!-- empty --></div>
       </header>
-      <div class="panel-content" id="services">
+      <div class="panel-content" id="services-container">
         <em>Select a device first</em>
       </div>
     </section>
 
-    <!-- Panel 3: Actions -->
+    <!-- Panel 2: Actions -->
     <section class="panel inactive" data-panel="2">
       <header class="panel-header">
-        <span class="panel-title">Actions / SCPD</span>
-        <div class="toolbar">
-          <button>Toggle XML</button>
-        </div>
+        <span class="panel-title">3. Actions</span>
+        <div class="toolbar"><!-- empty --></div>
       </header>
-      <div class="panel-content" id="actions">
+      <div class="panel-content" id="actions-container">
         <em>Select a service first</em>
+      </div>
+    </section>
+
+    <!-- Panel 3: Playground -->
+    <section class="panel inactive" data-panel="3">
+      <header class="panel-header">
+        <span class="panel-title">4. Try It Playground</span>
+        <div class="toolbar"><!-- empty --></div>
+      </header>
+      <div class="panel-content" id="playground-container">
+        <em>Select an action first</em>
       </div>
     </section>
 
   </div>
 
-  <script src="/socket.io/socket.io.js"></script>
-  <script src="app.js"></script>
+  <!-- Loaded as a native modern ES Module -->
+  <script type="module" src="js/app.js"></script>
 </body>
 
 </html>
