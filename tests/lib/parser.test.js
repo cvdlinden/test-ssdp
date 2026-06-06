@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseSsdpMessage, parseMaxAge } from '../../lib/parser.js';
+import * as parser from '../../lib/parser.js';
 
 test('SSDP Parser - should correctly parse valid M-SEARCH responses', () => {
   const rawResponse =
@@ -10,7 +10,7 @@ test('SSDP Parser - should correctly parse valid M-SEARCH responses', () => {
     'USN: uuid:1234::upnp:rootdevice\r\n' +
     '\r\n';
 
-  const result = parseSsdpMessage(rawResponse);
+  const result = parser.parseSsdpMessage(rawResponse);
 
   assert.ok(result);
   assert.equal(result.type, 'HTTP/1.1 200 OK');
@@ -19,7 +19,46 @@ test('SSDP Parser - should correctly parse valid M-SEARCH responses', () => {
 });
 
 test('SSDP Parser - should extract max-age safely', () => {
-  assert.equal(parseMaxAge('max-age=3600'), 3600);
-  assert.equal(parseMaxAge('MAX-AGE = 900'), 900);
-  assert.equal(parseMaxAge(null), 1800); // fallback
+  assert.equal(parser.parseMaxAge('max-age=3600'), 3600);
+  assert.equal(parser.parseMaxAge('MAX-AGE = 900'), 900);
+  assert.equal(parser.parseMaxAge(null), 1800); // fallback
+});
+
+test('SCPD Parser - should correctly parse actions and match state variables types', () => {
+  const mockScpdXml = `
+    <?xml version="1.0"?>
+    <scpd xmlns="urn:schemas-upnp-org:service-1-0">
+      <specVersion><major>1</major><minor>0</minor></specVersion>
+      <actionList>
+        <action>
+          <name>SetTarget</name>
+          <argumentList>
+            <argument>
+              <name>NewTargetValue</name>
+              <direction>in</direction>
+              <relatedStateVariable>Target</relatedStateVariable>
+            </argument>
+          </argumentList>
+        </action>
+      </actionList>
+      <serviceStateTable>
+        <stateVariable sendEvents="no">
+          <name>Target</name>
+          <dataType>boolean</dataType>
+          <defaultValue>0</defaultValue>
+        </stateVariable>
+      </serviceStateTable>
+    </scpd>
+  `;
+
+  const result = parser.parseServiceDescription(mockScpdXml);
+
+  assert.ok(result);
+  assert.equal(result.actions.length, 1);
+  assert.equal(result.actions[0].name, 'SetTarget');
+
+  const arg = result.actions[0].arguments[0];
+  assert.equal(arg.name, 'NewTargetValue');
+  assert.equal(arg.direction, 'in');
+  assert.equal(arg.dataType, 'boolean'); // Verified linkage!
 });
