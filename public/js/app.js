@@ -30,7 +30,8 @@ const UPnPExplorer = (() => {
         devices: new Map(),
         selectedDeviceLocation: null,
         selectedServiceId: null,
-        selectedActionName: null
+        selectedActionName: null,
+        currentActionsSchema: []
     };
 
     /* =========================
@@ -79,10 +80,12 @@ const UPnPExplorer = (() => {
         state.selectedDeviceLocation = navState.location;
         state.selectedServiceId = navState.serviceId;
         state.selectedActionName = navState.actionName;
+        const serviceType = navState.serviceType || null;
+        // console.log('Applying navigation state:', navState);
 
         activatePanel(navState.level);
 
-        // Reset subordinate columns on backward navigation
+        // Level 0: Device overview (Reset everything else)
         if (navState.level === 0) {
             servicesContainer.innerHTML = '<em>Select a device first</em>';
             actionsContainer.innerHTML = '<em>Select a service first</em>';
@@ -90,15 +93,26 @@ const UPnPExplorer = (() => {
             return;
         }
 
+        // Level 1: Device selected -> Render services, reset actions/playground
         if (navState.level === 1 && navState.location) {
             actionsContainer.innerHTML = '<em>Select a service first</em>';
             playgroundContainer.innerHTML = '<em>Select an action first</em>';
             renderServices(navState.location);
+            return;
         }
 
-        if (navState.level === 2 && navState.location && navState.serviceId && navState.actionName) {
+        // Level 2: Service selected -> Render actions, reset playground
+        if (navState.level === 2 && navState.location && navState.serviceId) {
             playgroundContainer.innerHTML = '<em>Select an action first</em>';
-            fetchAndRenderActions(navState.location, navState.serviceId, navState.actionName);
+            const device = state.devices.get(navState.location);
+            const srv = device.services.find(s => s.serviceId === navState.serviceId);
+            fetchAndRenderActions(navState.location, navState.serviceId, srv.SCPDURL);
+            return;
+        }
+
+        // Level 3: Action selected -> Render playground form
+        if (navState.level === 3 && navState.location && navState.serviceId && navState.actionName && serviceType) {
+            renderPlaygroundForm(navState.location, navState.serviceId, navState.actionName, serviceType);
         }
     }
 
@@ -236,6 +250,7 @@ const UPnPExplorer = (() => {
      */
     async function fetchAndRenderActions(location, serviceId, scpdUrl) {
         actionsContainer.innerHTML = '<em>Loading service actions...</em>';
+        console.log('Fetching service description schema for:', { location, serviceId, scpdUrl });
 
         try {
             const response = await fetch(`/api/services/schema?location=${encodeURIComponent(location)}&scpdUrl=${encodeURIComponent(scpdUrl)}`);
@@ -259,12 +274,12 @@ const UPnPExplorer = (() => {
                 <div style="font-size: 12px; font-weight: 600; margin-bottom: 8px; color: var(--text);">Available Actions & Parameters:</div>
             `;
 
-            if (!data.actions || data.actions.length === 0) {
+            if (data.actions.length === 0) {
                 actionsContainer.innerHTML = serviceHeaderHtml + '<em>This service contains no exposed actions.</em>';
                 return;
             }
 
-            // NEW: Sort actions alphabetically by their name property
+            // Sort actions alphabetically by their name property
             const sortedActions = [...data.actions].sort((a, b) => {
                 const nameA = (a.name || '').toUpperCase();
                 const nameB = (b.name || '').toUpperCase();
@@ -286,7 +301,7 @@ const UPnPExplorer = (() => {
 
                         let typeMeta = a.dataType;
                         if (a.allowedValues) {
-                            typeMeta += ` (${a.allowedValues.join('|')})`;
+                            typeMeta += ` (${a.allowedValues.join(', ')})`;
                         }
 
                         return `
@@ -322,12 +337,11 @@ const UPnPExplorer = (() => {
                     item.classList.add('selected');
 
                     const actionName = item.getAttribute('data-action-name');
+                    const device = state.devices.get(location);
+                    const serviceMeta = device.services.find(s => s.serviceId === serviceId);
+                    console.log(`Routing to Playground execution layout for: ${actionName}`, serviceMeta);
 
-                    // Store the full schema definition for this action inside the state map temporarily for Column 4 access
-                    const selectedActionSchema = sortedActions.find(a => a.name === actionName);
-                    console.log(`Routing to Playground execution layout for: ${actionName}`, selectedActionSchema);
-
-                    // Next step: pushNavigationState(3, location, serviceId, actionName);
+                    pushNavigationState(3, location, serviceId, actionName, serviceMeta.serviceType);
                 };
             });
 
@@ -335,6 +349,119 @@ const UPnPExplorer = (() => {
             console.error('Failed to parse active action schema layout:', err);
             actionsContainer.innerHTML = '<em style="color: #ff6b6b;">Failed to load actions from this device interface.</em>';
         }
+    }
+
+    /**
+     * Dynamically renders input elements for Column 4 based on the action argument contracts.
+     */
+    function renderPlaygroundForm(location, serviceId, actionName, serviceType) {
+        const actionSchema = state.currentActionsSchema.find(a => a.name === actionName);
+        if (!actionSchema) {
+            playgroundContainer.innerHTML = '<em>Failed to resolve action specification.</em>';
+            return;
+        }
+        console.log('Rendering playground for action:', { actionName, actionSchema });
+
+        const device = state.devices.get(location);
+        const serviceMeta = device.services.find(s => s.serviceId === serviceId);
+
+        // Filter only for [In] arguments to build out our submission form
+        const inputArgs = actionSchema.arguments ? actionSchema.arguments.filter(a => a.direction.toLowerCase() === 'in') : [];
+
+        let formFieldsHtml = '';
+        if (inputArgs.length === 0) {
+            formFieldsHtml = '<p style="color: var(--muted); font-style: italic; margin-bottom: 16px;">This action requires no parameters. Ready to fire.</p>';
+        } else {
+            formFieldsHtml = inputArgs.map(arg => {
+                let inputHtml = '';
+
+                // If allowed values enum is present, render a clean dropdown selector input box
+                if (arg.allowedValues) {
+                    inputHtml = `
+                        <select class="playground-input" data-arg-name="${arg.name}" style="width:100%; padding:8px; background:#020617; border:1px solid var(--border); color:var(--text); border-radius:4px; font-size:13px;">
+                        ${arg.allowedValues.map(v => `<option value="${v}">${v}</option>`).join('')}
+                        </select>
+                    `;
+                } else {
+                    const placeholder = arg.dataType === 'boolean' ? '0 (False) or 1 (True)' : arg.dataType;
+                    inputHtml = `
+                        <input type="text" class="playground-input" data-arg-name="${arg.name}" placeholder="${placeholder}" style="width:100%; padding:8px; background:#020617; border:1px solid var(--border); color:var(--text); border-radius:4px; font-size:13px;" />
+                    `;
+                }
+
+                return `
+                    <div style="margin-bottom: 14px;">
+                        <label style="display:block; font-size:12px; font-weight:bold; margin-bottom:6px; color:var(--text);">${arg.name} <span style="color:var(--muted); font-weight:normal;">[${arg.dataType}]</span></label>
+                        ${inputHtml}
+                    </div>
+                `;
+            }).join('');
+        }
+
+        playgroundContainer.innerHTML = `
+            <div class="playground-card" style="padding: 4px; border-radius: 4px;">
+                <div style="padding: 10px; border: 1px dashed var(--border); border-radius: 4px; background: rgba(255, 159, 67, 0.03); margin-bottom: 16px;">
+                <div style="font-size: 11px; text-transform: uppercase; color: #ff9f43; font-weight: bold; margin-bottom: 4px;">Playground Target</div>
+                <div style="font-size: 15px; font-weight: bold; color: var(--text); word-break: break-all;">${actionName}</div>
+                </div>
+                
+                <form id="soap-form">
+                ${formFieldsHtml}
+                <button type="submit" id="btn-soap-submit" style="width:100%; padding:10px; background:var(--accent); border:none; color:#0f172a; font-weight:bold; border-radius:4px; cursor:pointer; font-size:13px; transition: opacity 0.2s;">Execute SOAP Post 🚀</button>
+                </form>
+
+                <div style="margin-top: 20px; font-size: 12px; font-weight: bold; color: var(--text);">Response Output Payload:</div>
+                <pre id="soap-response-output" style="margin-top:8px; background:#020617; border:1px solid var(--border); border-radius:4px; padding:12px; font-family:monospace; font-size:12px; overflow-x:auto; min-height:80px; color:var(--muted);"><em>Awaiting command execution execution context...</em></pre>
+            </div>
+        `;
+
+        // Bind execution routines to form submits
+        const form = document.getElementById('soap-form');
+        const outputConsole = document.getElementById('soap-response-output');
+        const submitBtn = document.getElementById('btn-soap-submit');
+
+        form.onsubmit = async (e) => {
+            e.preventDefault();
+            submitBtn.disabled = true;
+            submitBtn.style.opacity = '0.5';
+            outputConsole.innerHTML = '<em>Transmitting SOAP XML Envelope to hardware device...</em>';
+            outputConsole.style.color = 'var(--muted)';
+
+            // Collect current dynamic input data states
+            const payloadArgs = {};
+            form.querySelectorAll('.playground-input').forEach(input => {
+                const name = input.getAttribute('data-arg-name');
+                payloadArgs[name] = input.value;
+            });
+
+            try {
+                const response = await fetch('/api/services/execute', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        location,
+                        controlUrl: serviceMeta.controlURL,
+                        serviceType,
+                        actionName,
+                        args: payloadArgs
+                    })
+                });
+
+                const data = await response.json();
+
+                // Pretty-print json string return results into code frame
+                outputConsole.innerHTML = JSON.stringify(data, null, 2);
+                outputConsole.style.color = data.error ? '#ff6b6b' : 'var(--accent)';
+
+            } catch (err) {
+                console.error('SOAP execution transmission error:', err);
+                outputConsole.innerHTML = `Network Communication Failure: ${err.message}`;
+                outputConsole.style.color = '#ff6b6b';
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.style.opacity = '1';
+            }
+        };
     }
 
     /* =========================

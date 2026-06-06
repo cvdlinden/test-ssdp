@@ -3,7 +3,7 @@ import { createServer } from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { startSsdpDiscovery, stopSsdpDiscovery } from './lib/socket.js';
-import { parseDeviceDescription, parseServiceDescription } from './lib/parser.js';
+import { parseDeviceDescription, parseServiceDescription, parseSoapResponse } from './lib/parser.js';
 import * as store from './lib/store.js';
 
 // ESM environment workaround for __dirname
@@ -94,6 +94,61 @@ app.get('/api/services/schema', async (req, res) => {
     }
 });
 
+// API endpoint to execute a live UPnP SOAP action against a network device (Column 4)
+app.post('/api/services/execute', async (req, res) => {
+    const { location, controlUrl, serviceType, actionName, args } = req.body;
+
+    if (!location || !controlUrl || !serviceType || !actionName) {
+        return res.status(400).json({ error: 'Missing required payload parameters.' });
+    }
+
+    try {
+        // Resolve the relative control URL against the device base location URL
+        const baseUrl = new URL(location);
+        const absoluteControlUrl = new URL(controlUrl, baseUrl).href;
+
+        // 1. Map JSON arguments dictionary to raw inline XML tags
+        let argumentsXml = '';
+        if (args && typeof args === 'object') {
+            argumentsXml = Object.entries(args)
+                .map(([key, val]) => `<${key}>${val}</${key}>`)
+                .join('');
+        }
+
+        // 2. Wrap the query into the official strict UPnP SOAP XML envelope string
+        const soapEnvelope =
+            `<?xml version="1.0" encoding="utf-8"?>\r\n` +
+            `<s:Envelope xmlns:s="http://xmlsoap.org" s:encodingStyle="http://xmlsoap.org">\r\n` +
+            `  <s:Body>\r\n` +
+            `    <u:${actionName} xmlns:u="${serviceType}">\r\n` +
+            `      ${argumentsXml}\r\n` +
+            `    </u:${actionName}>\r\n` +
+            `  </s:Body>\r\n` +
+            `</s:Envelope>\r\n`;
+
+        console.log(`\x1b[36m[SOAP Action]\x1b[0m Executing ${actionName} -> ${absoluteControlUrl}`);
+
+        // 3. Dispatch the network POST request to the hardware interface
+        const response = await fetch(absoluteControlUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'text/xml; charset="utf-8"',
+                'SOAPACTION': `"${serviceType}#${actionName}"` // Crucial: UPnP specification requires double quotes
+            },
+            body: soapEnvelope
+        });
+
+        const xmlText = await response.text();
+
+        // 4. Run the XML response back through our parser and return JSON to the web UI
+        const jsonResponse = parseSoapResponse(xmlText, actionName);
+        res.json(jsonResponse);
+
+    } catch (err) {
+        console.error(`\x1b[31m[SOAP Error]\x1b[0m Execution pipeline failed:`, err.message);
+        res.status(500).json({ error: 'Action execution failed', details: err.message });
+    }
+});
 
 // Real-time Event stream endpoint (Server-Sent Events)
 app.get('/api/events', (req, res) => {
