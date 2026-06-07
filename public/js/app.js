@@ -81,12 +81,13 @@ const UPnPExplorer = (() => {
         state.selectedServiceId = navState.serviceId;
         state.selectedActionName = navState.actionName;
         const serviceType = navState.serviceType || null;
-        // console.log('Applying navigation state:', navState);
+        console.log('Applying navigation state:', navState);
 
         activatePanel(navState.level);
 
         // Level 0: Device overview (Reset everything else)
         if (navState.level === 0) {
+            console.log('At root level: rendering device list overview.');
             servicesContainer.innerHTML = '<em>Select a device first</em>';
             actionsContainer.innerHTML = '<em>Select a service first</em>';
             playgroundContainer.innerHTML = '<em>Select an action first</em>';
@@ -95,6 +96,7 @@ const UPnPExplorer = (() => {
 
         // Level 1: Device selected -> Render services, reset actions/playground
         if (navState.level === 1 && navState.location) {
+            console.log(`Device selected: ${navState.location}. Rendering services...`);
             actionsContainer.innerHTML = '<em>Select a service first</em>';
             playgroundContainer.innerHTML = '<em>Select an action first</em>';
             renderServices(navState.location);
@@ -103,6 +105,7 @@ const UPnPExplorer = (() => {
 
         // Level 2: Service selected -> Render actions, reset playground
         if (navState.level === 2 && navState.location && navState.serviceId) {
+            console.log(`Service selected: ${navState.serviceId}. Rendering actions...`);
             playgroundContainer.innerHTML = '<em>Select an action first</em>';
             const device = state.devices.get(navState.location);
             const srv = device.services.find(s => s.serviceId === navState.serviceId);
@@ -112,6 +115,7 @@ const UPnPExplorer = (() => {
 
         // Level 3: Action selected -> Render playground form
         if (navState.level === 3 && navState.location && navState.serviceId && navState.actionName && serviceType) {
+            console.log(`Action selected: ${navState.actionName}. Rendering playground form...`);
             renderPlaygroundForm(navState.location, navState.serviceId, navState.actionName, serviceType);
         }
     }
