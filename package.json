@@ -1,6 +1,6 @@
 {
   "name": "test-ssdp",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "Testing Node with SSDP",
   "main": "index.js",
   "type": "module",
