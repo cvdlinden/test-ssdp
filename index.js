@@ -97,6 +97,7 @@ app.get('/api/services/schema', async (req, res) => {
 // API endpoint to execute a live UPnP SOAP action against a network device (Column 4)
 app.post('/api/services/execute', async (req, res) => {
     const { location, controlUrl, serviceType, actionName, args } = req.body;
+    console.log(req.body);
 
     if (!location || !controlUrl || !serviceType || !actionName) {
         return res.status(400).json({ error: 'Missing required payload parameters.' });
@@ -118,13 +119,14 @@ app.post('/api/services/execute', async (req, res) => {
         // 2. Wrap the query into the official strict UPnP SOAP XML envelope string
         const soapEnvelope =
             `<?xml version="1.0" encoding="utf-8"?>\r\n` +
-            `<s:Envelope xmlns:s="http://xmlsoap.org" s:encodingStyle="http://xmlsoap.org">\r\n` +
+            `<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">\r\n` +
             `  <s:Body>\r\n` +
             `    <u:${actionName} xmlns:u="${serviceType}">\r\n` +
             `      ${argumentsXml}\r\n` +
             `    </u:${actionName}>\r\n` +
             `  </s:Body>\r\n` +
             `</s:Envelope>\r\n`;
+        // console.log('Constructed SOAP Envelope:', soapEnvelope);
 
         console.log(`\x1b[36m[SOAP Action]\x1b[0m Executing ${actionName} -> ${absoluteControlUrl}`);
 

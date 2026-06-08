@@ -22,16 +22,14 @@
 'use strict';
 
 const UPnPExplorer = (() => {
+
     /* =========================
      * Private State
      * ========================= */
     const state = {
         /** @type {Map<string, Object>} */
-        devices: new Map(),
-        selectedDeviceLocation: null,
-        selectedServiceId: null,
-        selectedActionName: null,
-        currentActionsSchema: []
+        devices: new Map(), // Keyed by device LOCATION URL, values are device metadata + services list
+        currentActionsSchema: [] // The parsed actions schema for the currently selected service, used to render the playground form
     };
 
     /* =========================
@@ -64,10 +62,11 @@ const UPnPExplorer = (() => {
     /**
      * Updates browser history and view state seamlessly.
      */
-    function pushNavigationState(level, location = null, serviceId = null, actionName = null) {
-        const navState = { level, location, serviceId, actionName };
-        history.pushState(navState, '', '');
-        applyNavigationState(navState);
+    function pushNavigationState(level, location = null, serviceId = null, scpdUrl = null, actionName = null) {
+        // console.log('Push navstate:', { level, location, serviceId, scpdUrl, actionName });
+        const navState = { level, location, serviceId, scpdUrl, actionName };
+        history.pushState(navState, '', ''); // Remmember the current navigation state in browser history, so we can restore it on back/forward navigation
+        applyNavigationState(navState); // Apply the new navigation state immediately to update the view without waiting for a popstate event (which only fires on back/forward navigation, not on pushState)
     }
 
     /**
@@ -77,17 +76,12 @@ const UPnPExplorer = (() => {
     function applyNavigationState(navState) {
         if (!navState) return;
 
-        state.selectedDeviceLocation = navState.location;
-        state.selectedServiceId = navState.serviceId;
-        state.selectedActionName = navState.actionName;
-        const serviceType = navState.serviceType || null;
-        console.log('Applying navigation state:', navState);
+        console.log('Apply navstate:', navState);
 
         activatePanel(navState.level);
 
         // Level 0: Device overview (Reset everything else)
         if (navState.level === 0) {
-            console.log('At root level: rendering device list overview.');
             servicesContainer.innerHTML = '<em>Select a device first</em>';
             actionsContainer.innerHTML = '<em>Select a service first</em>';
             playgroundContainer.innerHTML = '<em>Select an action first</em>';
@@ -96,33 +90,23 @@ const UPnPExplorer = (() => {
 
         // Level 1: Device selected -> Render services, reset actions/playground
         if (navState.level === 1 && navState.location) {
-            console.log(`Device selected: ${navState.location}. Rendering services...`);
             actionsContainer.innerHTML = '<em>Select a service first</em>';
             playgroundContainer.innerHTML = '<em>Select an action first</em>';
-            renderServices(navState.location);
+            renderServices(navState);
             return;
         }
 
         // Level 2: Service selected -> Render actions, reset playground
-        if (navState.level === 2 && navState.location && navState.serviceId) {
-            console.log(`Service selected: ${navState.serviceId}. Rendering actions...`);
+        if (navState.level === 2 && navState.location && navState.serviceId && navState.scpdUrl) {
             playgroundContainer.innerHTML = '<em>Select an action first</em>';
-            const device = state.devices.get(navState.location);
-            const srv = device.services.find(s => s.serviceId === navState.serviceId);
-            fetchAndRenderActions(navState.location, navState.serviceId, srv.SCPDURL);
+            fetchAndRenderActions(navState);
             return;
         }
 
         // Level 3: Action selected -> Render playground form
-        if (navState.level === 3 && navState.location && navState.serviceId && navState.actionName && serviceType) {
-            console.log(`Action selected: ${navState.actionName}. Rendering playground form...`);
-            renderPlaygroundForm(navState.location, navState.serviceId, navState.actionName, serviceType);
+        if (navState.level === 3 && navState.location && navState.serviceId && navState.actionName) {
+            renderPlaygroundForm(navState);
         }
-    }
-
-    function bindHistoryEvents() {
-        console.log('Init: Binding history navigation events...');
-        window.addEventListener('popstate', (e) => applyNavigationState(e.state));
     }
 
     /* =========================
@@ -132,7 +116,7 @@ const UPnPExplorer = (() => {
      * Renders list items for Column 1 (Devices).
      */
     function renderDeviceList() {
-        console.log('Rendering devices:', state.devices.size);
+        console.log('Rendering devices, count:', state.devices.size);
         if (state.devices.size === 0) {
             devicesContainer.innerHTML = '<em>No devices discovered yet.</em>';
             return;
@@ -151,14 +135,12 @@ const UPnPExplorer = (() => {
             const model = d.modelName || 'Generic';
             const safeId = btoa(d.location).replace(/=/g, '');
             const deviceType = d.deviceType || '';
-            const location = d.location || '';
 
             return `
                 <div class="list-item" id="dev-${safeId}" data-location="${d.location}">
                     <strong>${name}</strong>
-                    <small>${model} • ${ip}</small>
+                    <small>${model} | ${ip}</small>
                     <small>${deviceType}</small>
-                    <small>${location}</small>
                 </div>
             `;
         }).join('');
@@ -172,9 +154,8 @@ const UPnPExplorer = (() => {
                 devicesContainer.querySelectorAll('.list-item').forEach(el => el.classList.remove('selected'));
                 item.classList.add('selected');
 
-                const loc = item.getAttribute('data-location');
-                console.log('Device item clicked:', loc);
-                pushNavigationState(1, loc);
+                const location = item.getAttribute('data-location');
+                pushNavigationState(1, location);
             };
         });
     }
@@ -182,10 +163,11 @@ const UPnPExplorer = (() => {
     /**
      * Populates Column 2 with detailed device metadata and a clickable list of its services.
      * 
-     * @param {string} location - The unique SSDP LOCATION URL of the selected device.
+     * @param {Object} navState - The navigation state containing the selected device location.
      */
-    function renderServices(location) {
-        const device = state.devices.get(location);
+    function renderServices(navState) {
+        // Look up the selected device from state using the location URL from navState
+        const device = state.devices.get(navState.location);
         if (!device) {
             servicesContainer.innerHTML = '<em>Device data missing from local state.</em>';
             return;
@@ -194,17 +176,17 @@ const UPnPExplorer = (() => {
 
         // 1. Build the Device Information Header Block
         const metaBlockHtml = `
-        <div class="device-info-block" style="padding: 10px; border: 1px dashed var(--border); border-radius: 4px; background: rgba(255,255,255,0.01); margin-bottom: 16px;">
-            <div style="font-size: 11px; text-transform: uppercase; color: var(--accent); font-weight: bold; margin-bottom: 6px;">Device Specifications</div>
-            <div><strong>Name:</strong> ${device.friendlyName || 'Unknown Device'}</div>
-            <div><strong>Manufacturer:</strong> ${device.manufacturer || 'Unknown'}</div>
-            <div><strong>Model:</strong> ${device.modelName || 'Generic'}</div>
-            <div style="font-size: 12px; color: var(--muted); word-break: break-all;"><strong>IP Address:</strong> ${device.ip || '0.0.0.0'}</div>
-            <div style="font-size: 12px; color: var(--muted); word-break: break-all;"><strong>Type:</strong> ${device.deviceType || 'N/A'}</div>
-            <div style="font-size: 12px; color: var(--muted); word-break: break-all;"><strong>Id:</strong> ${device.id || 'N/A'}</div>
-            <div style="font-size: 11px; color: var(--muted); margin-top: 6px; word-break: break-all;"><strong>Descriptor:</strong> <a href="${device.location}" target="_blank" style="color: var(--accent); text-decoration: none;">${device.location} ↗</a></div>
-        </div>
-        <div style="font-size: 12px; font-weight: 600; margin-bottom: 8px; color: var(--text);">Available Services:</div>
+            <div class="device-info-block" style="padding: 10px; border: 1px dashed var(--border); border-radius: 4px; background: rgba(255,255,255,0.01); margin-bottom: 16px;">
+                <div style="font-size: 11px; text-transform: uppercase; color: var(--accent); font-weight: bold; margin-bottom: 6px;">Device Specifications</div>
+                <div><strong>Name:</strong> ${device.friendlyName || 'Unknown Device'}</div>
+                <div><strong>Manufacturer:</strong> ${device.manufacturer || 'Unknown'}</div>
+                <div><strong>Model:</strong> ${device.modelName || 'Generic'}</div>
+                <div style="font-size: 12px; color: var(--muted); word-break: break-all;"><strong>IP Address:</strong> ${device.ip || '0.0.0.0'}</div>
+                <div style="font-size: 12px; color: var(--muted); word-break: break-all;"><strong>Type:</strong> ${device.deviceType || 'N/A'}</div>
+                <div style="font-size: 12px; color: var(--muted); word-break: break-all;"><strong>Id:</strong> ${device.id || 'N/A'}</div>
+                <div style="font-size: 11px; color: var(--muted); margin-top: 6px; word-break: break-all;"><strong>Descriptor:</strong> <a href="${device.location}" target="_blank" style="color: var(--accent); text-decoration: none;">${device.location} ↗</a></div>
+            </div>
+            <div style="font-size: 12px; font-weight: 600; margin-bottom: 8px; color: var(--text);">Available Services:</div>
         `;
 
         // 2. Build the Clickable Services List
@@ -219,11 +201,11 @@ const UPnPExplorer = (() => {
             const type = s.serviceType || 'Unknown Type';
 
             return `
-        <div class="list-item service-item" data-service-id="${id}" data-scpd-url="${s.SCPDURL}">
-          <strong>${id}</strong>
-          <small>${type}</small>
-        </div>
-      `;
+                <div class="list-item service-item" data-service-id="${id}" data-scpd-url="${s.SCPDURL}">
+                <strong>${id}</strong>
+                <small>${type}</small>
+                </div>
+            `;
         }).join('');
 
         // Inject both components cleanly into Column 2
@@ -241,36 +223,38 @@ const UPnPExplorer = (() => {
                 const serviceId = item.getAttribute('data-service-id');
                 const scpdUrl = item.getAttribute('data-scpd-url');
 
-                console.log(`Routing to Service: ${serviceId} -> Schema URL path: ${scpdUrl}`);
-
                 // Push state to trigger Column 3 routing
-                pushNavigationState(2, location, serviceId, scpdUrl);
+                pushNavigationState(2, navState.location, serviceId, scpdUrl);
             };
         });
     }
 
     /**
      * Fetches the actions schema from the backend proxy and renders Column 3 with sorted service headers and data types.
+     * 
+     * @param {Object} navState - The navigation state containing the selected device location.
      */
-    async function fetchAndRenderActions(location, serviceId, scpdUrl) {
+    async function fetchAndRenderActions(navState) {
         actionsContainer.innerHTML = '<em>Loading service actions...</em>';
-        console.log('Fetching service description schema for:', { location, serviceId, scpdUrl });
 
         try {
-            const response = await fetch(`/api/services/schema?location=${encodeURIComponent(location)}&scpdUrl=${encodeURIComponent(scpdUrl)}`);
+            const url = `/api/services/schema?location=${encodeURIComponent(navState.location)}&scpdUrl=${encodeURIComponent(navState.scpdUrl)}`;
+            console.log('Fetching service schema from backend proxy:', url);
+            const response = await fetch(url);
             if (!response.ok) throw new Error('Proxy communication failure');
 
             const data = await response.json(); // Data contains { actions: [], stateVariables: {} }
+            console.log('Received service schema data:', data);
 
             // Resolve the absolute URL to the SCPD XML for the direct link
-            const baseUrl = new URL(location);
-            const absoluteScpdUrl = new URL(scpdUrl, baseUrl).href;
+            const baseUrl = new URL(navState.location);
+            const absoluteScpdUrl = new URL(navState.scpdUrl, baseUrl).href;
 
             // 1. Build a clear Header Block for the active service context including the raw XML link
             const serviceHeaderHtml = `
                 <div class="service-info-header" style="padding: 10px; border: 1px dashed var(--border); border-radius: 4px; background: rgba(4, 211, 97, 0.03); margin-bottom: 16px;">
                 <div style="font-size: 11px; text-transform: uppercase; color: var(--accent); font-weight: bold; margin-bottom: 4px;">Active Auditing Target</div>
-                <div style="font-size: 15px; font-weight: bold; color: var(--text); word-break: break-all; margin-bottom: 6px;">${serviceId}</div>
+                <div style="font-size: 15px; font-weight: bold; color: var(--text); word-break: break-all; margin-bottom: 6px;">${navState.serviceId}</div>
                 <div style="font-size: 11px; color: var(--muted); border-top: 1px solid var(--border); padding-top: 6px; margin-top: 4px; word-break: break-all;">
                     <strong>Schema:</strong> <a href="${absoluteScpdUrl}" target="_blank" style="color: var(--accent); text-decoration: none;">Service XML ↗</a>
                 </div>
@@ -283,8 +267,11 @@ const UPnPExplorer = (() => {
                 return;
             }
 
+            // Keep the data in state.currentActionsSchema for later reference when rendering the playground form
+            state.currentActionsSchema = [...data.actions];
+
             // Sort actions alphabetically by their name property
-            const sortedActions = [...data.actions].sort((a, b) => {
+            const sortedActions = [...state.currentActionsSchema].sort((a, b) => {
                 const nameA = (a.name || '').toUpperCase();
                 const nameB = (b.name || '').toUpperCase();
                 return nameA.localeCompare(nameB);
@@ -341,11 +328,8 @@ const UPnPExplorer = (() => {
                     item.classList.add('selected');
 
                     const actionName = item.getAttribute('data-action-name');
-                    const device = state.devices.get(location);
-                    const serviceMeta = device.services.find(s => s.serviceId === serviceId);
-                    console.log(`Routing to Playground execution layout for: ${actionName}`, serviceMeta);
 
-                    pushNavigationState(3, location, serviceId, actionName, serviceMeta.serviceType);
+                    pushNavigationState(3, navState.location, navState.serviceId, navState.scpdUrl, actionName);
                 };
             });
 
@@ -357,17 +341,20 @@ const UPnPExplorer = (() => {
 
     /**
      * Dynamically renders input elements for Column 4 based on the action argument contracts.
+     * 
+     * @param {Object} navState - The navigation state containing the selected device location.
      */
-    function renderPlaygroundForm(location, serviceId, actionName, serviceType) {
-        const actionSchema = state.currentActionsSchema.find(a => a.name === actionName);
+    function renderPlaygroundForm(navState) {
+        const actionSchema = state.currentActionsSchema.find(a => a.name === navState.actionName);
         if (!actionSchema) {
             playgroundContainer.innerHTML = '<em>Failed to resolve action specification.</em>';
             return;
         }
-        console.log('Rendering playground for action:', { actionName, actionSchema });
+        console.log('Rendering playground for action:', actionSchema);
 
-        const device = state.devices.get(location);
-        const serviceMeta = device.services.find(s => s.serviceId === serviceId);
+        const device = state.devices.get(navState.location);
+        const serviceMeta = device.services.find(s => s.serviceId === navState.serviceId);
+        // console.log("serviceMeta:", serviceMeta);
 
         // Filter only for [In] arguments to build out our submission form
         const inputArgs = actionSchema.arguments ? actionSchema.arguments.filter(a => a.direction.toLowerCase() === 'in') : [];
@@ -406,7 +393,7 @@ const UPnPExplorer = (() => {
             <div class="playground-card" style="padding: 4px; border-radius: 4px;">
                 <div style="padding: 10px; border: 1px dashed var(--border); border-radius: 4px; background: rgba(255, 159, 67, 0.03); margin-bottom: 16px;">
                 <div style="font-size: 11px; text-transform: uppercase; color: #ff9f43; font-weight: bold; margin-bottom: 4px;">Playground Target</div>
-                <div style="font-size: 15px; font-weight: bold; color: var(--text); word-break: break-all;">${actionName}</div>
+                <div style="font-size: 15px; font-weight: bold; color: var(--text); word-break: break-all;">${navState.actionName}</div>
                 </div>
                 
                 <form id="soap-form">
@@ -443,10 +430,11 @@ const UPnPExplorer = (() => {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        location,
+                        location: navState.location,
+                        serviceId: serviceMeta.serviceId,
                         controlUrl: serviceMeta.controlURL,
-                        serviceType,
-                        actionName,
+                        serviceType: serviceMeta.serviceType,
+                        actionName: navState.actionName,
                         args: payloadArgs
                     })
                 });
@@ -496,7 +484,7 @@ const UPnPExplorer = (() => {
     function bindUIActions() {
         console.log('Init: Binding UI actions...');
         discoverButton.onclick = async (e) => {
-            console.log('Discover button clicked. Triggering device scan...');
+            // console.log('Discover button clicked. Triggering device scan...');
             e.stopPropagation();
             discoverButton.disabled = true;
             devicesContainer.innerHTML = '<em>Triggering network probe...</em>';
@@ -508,27 +496,37 @@ const UPnPExplorer = (() => {
             } catch (err) {
                 console.error('Failed to trigger scan:', err);
             } finally {
-                // Re-enable the button after 3 seconds (after the MX time has likely elapsed)
+                // Re-enable the button after 5 seconds (after the MX time has likely elapsed)
                 setTimeout(() => {
                     discoverButton.disabled = false;
-                }, 3000);
+                }, 5000);
             }
         };
+    }
+
+    /* =========================
+     * History Navigation Binding
+     * ========================= */
+    function bindHistoryEvents() {
+        console.log('Init: Binding history navigation events...');
+        window.addEventListener('popstate', (e) => applyNavigationState(e.state));
     }
 
     /* =========================
      * Public Initialization API
      * ========================= */
     async function init() {
-        initializeSsePipeline();
-        bindUIActions();
-        bindHistoryEvents();
+        // console.log('Initializing UPnP Explorer frontend application...');
+        initializeSsePipeline(); // Start listening to real-time device discovery events from the backend
+        bindUIActions(); // Bind click handlers for static UI elements like the Discover button
+        bindHistoryEvents(); // Set up browser history state management and routing
 
         // Establish default root history profile state
         history.replaceState({ level: 0, location: null, serviceId: null, actionName: null }, '', '');
 
         // Get devices that the backend has already discovered during startup and render them immediately!
         try {
+            // console.log('Loading initial device cache from backend...');
             const response = await fetch('/api/devices');
             const existingDevices = await response.json();
 
