@@ -1,3 +1,24 @@
+/**
+ * @file parser.test.js
+ * @description Unit tests for the SSDP and SCPD parsers in parser.js.
+ * @fileoverview Unit tests for the SSDP and SCPD parsers in parser.js.
+ * 
+ * This test suite validates the core parsing logic for:
+ * - parseSsdpMessage: Converts raw SSDP HTTPU messages into structured objects.
+ * - parseMaxAge: Safely extracts max-age values from CACHE-CONTROL headers.
+ * - parseServiceDescription: Parses UPnP service descriptions (SCPD XML) and ensures correct linkage between actions and state variables.
+ * 
+ * To run these tests, use the command:
+ * 
+ * node --test tests/lib/parser.test.js
+ * 
+ * Note: These tests focus on the parsing logic and do not require any network interactions or actual UPnP devices.
+ * They use hardcoded sample data to simulate typical SSDP responses and SCPD XML documents.
+ * 
+ * The test cases cover both successful parsing scenarios and edge cases, such as missing headers or malformed XML, to ensure robustness of the parser functions.
+ * 
+ */
+
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as parser from '../../lib/parser.js';

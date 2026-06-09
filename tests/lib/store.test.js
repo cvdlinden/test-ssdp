@@ -1,3 +1,17 @@
+/**
+ * @file store.test.js
+ * @description Test suite for the store module, ensuring proper saving and retrieval of device profiles in the in-memory database.
+ * @fileoverview Test suite for the store module, ensuring proper saving and retrieval of device profiles in the in-memory database.
+ * 
+ * This test validates that the store module correctly manages device profiles, allowing for saving new devices, checking for their existence, and retrieving them as needed. The tests cover both individual device retrieval and fetching all stored devices as a list.
+ * To run this test, use the command:
+ * 
+ * node --test tests/lib/store.test.js
+ * 
+ * Note: This test focuses on the logic of the store module and does not require any external dependencies or network interactions. It ensures that the in-memory database behaves as expected when managing device profiles, including proper handling of timestamps and data integrity.
+ * 
+ */
+
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import * as store from '../../lib/store.js';
